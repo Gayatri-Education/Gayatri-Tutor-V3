@@ -198,6 +198,18 @@ class LearningDependencyGraph:
         if self.get_concept(prereq_id) is None:
             raise ValueError(f"Concept not found: {prereq_id}")
 
+        # Check for cycles
+        ancestors = set()
+        queue = [prereq_id]
+        while queue:
+            current = queue.pop(0)
+            if current == concept_id:
+                raise ValueError(f"Adding this prerequisite would create a cycle: {concept_id} requires {prereq_id} which requires {concept_id}")
+            for p in self.get_prerequisites(current):
+                if p not in ancestors:
+                    ancestors.add(p)
+                    queue.append(p)
+
         conn = self._conn()
         conn.execute(
             "INSERT OR IGNORE INTO ldg_prerequisites (concept_id, prereq_id) VALUES (?, ?)",
@@ -252,11 +264,14 @@ class LearningDependencyGraph:
         if correct:
             # Learn: move mastery toward 1.0
             delta = LDG_LEARN_RATE * (1.0 - concept.mastery) * confidence
-            concept.mastery = min(1.0, concept.mastery + delta)
+            new_mastery = min(1.0, concept.mastery + delta)
         else:
             # Decay: move mastery toward 0.0
             delta = LDG_DECAY_RATE * concept.mastery * confidence
-            concept.mastery = max(0.0, concept.mastery - delta)
+            new_mastery = max(0.0, concept.mastery - delta)
+
+        old_mastery = concept.mastery
+        concept.mastery = new_mastery
 
         concept.exposure_count += 1
         if not correct:
@@ -277,7 +292,7 @@ class LearningDependencyGraph:
 
         logger.info(
             f"Attempt {concept_id}: correct={correct}, mastery={concept.mastery:.3f} "
-            f"(was {concept.mastery - delta if correct else concept.mastery + delta:.3f})"
+            f"(was {old_mastery:.3f})"
         )
         return concept.mastery
 

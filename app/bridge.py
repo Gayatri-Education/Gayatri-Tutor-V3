@@ -74,6 +74,10 @@ class Bridge(QObject):
     @Slot(str)
     def send_message(self, message: str):
         """Receive a user message, route through agent/model, stream tokens back."""
+        if self._generation_active:
+            self.error.emit("Please wait for the current response to finish.")
+            return
+
         orch = self._get_orchestrator()
         self._generation_active = True
 

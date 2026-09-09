@@ -175,7 +175,7 @@ def _get_nvidia_gpu_info() -> dict | None:
         vram_mb = int(parts[1].strip()) if len(parts) > 1 else 0
 
         return {"name": name, "vram_mb": vram_mb}
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+    except Exception:
         return None
 
 
@@ -189,14 +189,22 @@ def _get_ram_mb() -> int:
                         return int(line.split()[1]) // 1024
         elif platform.system() == "Windows":
             import ctypes
-            class MEMORYSTATUS(ctypes.Structure):
-                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
-                            ("dwTotalPhys", ctypes.c_ulong), ("dwAvailPhys", ctypes.c_ulong),
-                            ("dwTotalPageFile", ctypes.c_ulong), ("dwAvailPageFile", ctypes.c_ulong),
-                            ("dwTotalVirtual", ctypes.c_ulong), ("dwAvailVirtual", ctypes.c_ulong)]
-            mem = MEMORYSTATUS()
-            ctypes.windll.kernel32.GlobalMemoryStatus(ctypes.byref(mem))
-            return mem.dwTotalPhys // (1024 * 1024)
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            mem = MEMORYSTATUSEX()
+            mem.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem))
+            return int(mem.ullTotalPhys // (1024 * 1024))
         elif platform.system() == "Darwin":  # macOS
             result = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True)
             return int(result.stdout.strip()) // (1024 * 1024)

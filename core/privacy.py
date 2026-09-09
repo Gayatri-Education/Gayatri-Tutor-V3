@@ -95,28 +95,19 @@ class PIIRedactor:
         offset = 0  # cumulative offset from replacements
 
         for pii_type, pattern in self.PATTERNS:
-            for match in pattern.finditer(result_text):
-                # Replace this occurrence
+            def replacer(match: re.Match) -> str:
                 original = match.group(0)
                 placeholder = f"[{pii_type}]"
-                start, end = match.span()
-
-                # Save match info (positions are in the modified text)
                 matches.append(PIIMatch(
                     pii_type=pii_type,
                     placeholder=placeholder,
                     original=original,
-                    start=start,
-                    end=end,
+                    start=match.start(),
+                    end=match.end(),
                 ))
+                return placeholder
 
-                # Replace in text
-                result_text = (
-                    result_text[:start]
-                    + placeholder
-                    + result_text[end:]
-                )
-                offset += len(original) - len(placeholder)
+            result_text = pattern.sub(replacer, result_text)
 
         return RedactionResult(
             clean_text=result_text,

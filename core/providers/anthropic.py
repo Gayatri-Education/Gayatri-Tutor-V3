@@ -5,6 +5,7 @@ Uses the Messages API (claude-sonnet, claude-opus, claude-haiku).
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Iterator

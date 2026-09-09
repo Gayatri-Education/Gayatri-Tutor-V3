@@ -63,26 +63,22 @@ class AgentRuntime:
         self._step_count = 0
         self._max_steps = 12
 
-    def process(self, user_message: str, context: AgentContext) -> AgentResponse:
+    def process(self, user_message: str, context: AgentContext, spec: AgentSpec | None = None) -> AgentResponse:
         """Process a user message through the agent pipeline.
 
-        1. Dispatch to the best matching agent
+        1. Dispatch to the best matching agent (if spec not provided)
         2. Let the agent process (may include tool calls)
         3. Return the response
         """
-        self._step_count = 0
-
-        # 1. Find the best agent
-        dispatch = self.registry.dispatch(user_message)
-
-        if dispatch is None:
-            # No agent matched — return a default response
-            return AgentResponse(
-                text=self._default_response(user_message),
-                agent_name="default",
-            )
-
-        spec, confidence = dispatch
+        if spec is None:
+            dispatch = self.registry.dispatch(user_message)
+            if dispatch is None:
+                # No agent matched — return a default response
+                return AgentResponse(
+                    text=self._default_response(user_message),
+                    agent_name="default",
+                )
+            spec, confidence = dispatch
 
         # 2. Instantiate and run the agent
         agent = self.registry.instantiate(spec.name)
@@ -94,13 +90,13 @@ class AgentRuntime:
 
     def _agent_loop(self, agent, spec: AgentSpec, context: AgentContext) -> AgentResponse:
         """Run the agent, handling tool calls in a loop."""
-        self._step_count = 0
+        step_count = 0
 
         response = agent.process(context)
 
         # Handle tool calls if the agent produced them
-        while response.tool_calls and self._step_count < self._max_steps:
-            self._step_count += 1
+        while response.tool_calls and step_count < self._max_steps:
+            step_count += 1
             tool_results = []
 
             for tc in response.tool_calls:

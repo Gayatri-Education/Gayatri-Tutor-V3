@@ -72,6 +72,11 @@ class AgentSpec:
             overlap = len(trigger_words & text_words)
             if overlap > 0:
                 score = overlap / len(trigger_words)
+                
+                # Penalize single-word triggers to prevent aggressive misrouting
+                if len(trigger_words) == 1:
+                    score *= 0.5
+                    
                 best_score = max(best_score, score)
 
         threshold = 0.6  # at least 60% of trigger words must match (reduces false positives)

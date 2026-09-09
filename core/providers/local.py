@@ -199,7 +199,9 @@ class LocalProvider:
         temperature = kwargs.get("temperature", DEFAULT_TEMPERATURE)
         top_p = kwargs.get("top_p", DEFAULT_TOP_P)
         top_k = kwargs.get("top_k", DEFAULT_TOP_K)
-        stop = kwargs.get("stop", [])
+        stop = kwargs.get("stop")
+        if not stop:
+            stop = ["<end_of_turn>"]
 
         logger.info(f"Generating: max_tokens={max_tokens}, temp={temperature}")
 

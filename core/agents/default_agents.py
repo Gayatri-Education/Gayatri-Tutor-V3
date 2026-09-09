@@ -57,7 +57,7 @@ def _get_tutor_context(context) -> str:
         parts.append(f"Student mastery: {tutor_meta['mastery_pct']}")
     if tutor_meta.get('waiting_for_answer'):
         parts.append("You asked a question — wait for the student's answer before continuing.")
-    if tutor_meta.get('prerequisites_needed'):
+    if tutor_meta.get('prerequisites_not_met'):
         prereq_names = tutor_meta.get('prereq_names', [])
         parts.append(
             f"IMPORTANT: The student needs to master prerequisites first: "

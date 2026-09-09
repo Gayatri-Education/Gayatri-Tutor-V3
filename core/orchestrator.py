@@ -117,6 +117,10 @@ def _inject_tutor_context(context: AgentContext, session_id: str) -> None:
             if ctx.waiting_for_answer:
                 tutor_meta["waiting_for_answer"] = True
 
+            if getattr(ctx, 'last_attempt_correct', None) is not None:
+                tutor_meta["recent_attempt"] = {"correct": ctx.last_attempt_correct}
+                ctx.last_attempt_correct = None
+
             if not hasattr(context, 'metadata') or context.metadata is None:
                 context.metadata = {}
             context.metadata["tutor"] = tutor_meta
@@ -170,12 +174,14 @@ def _evaluate_tutor_response(session_id: str, user_message: str, agent_response:
                 f"Evaluated response for {ctx.current_concept_name}: "
                 f"{'correct' if correct else 'incorrect'}, mastery={mastery:.3f}"
             )
-        else:
-            # Tutor was explaining — mark as waiting for answer
-            tutor.set_waiting_for_answer(session_id)
-
     except Exception as exc:
         logger.error(f"Failed to evaluate tutor response: {exc}")
+
+def _post_tutor_response(session_id: str) -> None:
+    """Mark the tutor as waiting for an answer after it responds."""
+    tutor = _get_tutor_engine()
+    if tutor:
+        tutor.set_waiting_for_answer(session_id)
 
 
 @dataclass
@@ -218,6 +224,10 @@ class Orchestrator:
         """Process a user message and return the full response."""
         opts = options or TurnOptions()
         start = time.time()
+        
+        # Redact PII upfront so all agents and conversation history are safe
+        user_message = _redact_pii(user_message)
+        
         conv = self._get_conversation(session_id)
 
         # 1. Try agent dispatch
@@ -236,15 +246,14 @@ class Orchestrator:
 
             # Inject LDG context for Tutor agent
             if spec.name == "Tutor":
+                _evaluate_tutor_response(session_id, user_message, "")
                 _inject_tutor_context(context, session_id)
 
-            response = self.runtime.process(user_message, context)
+            response = self.runtime.process(user_message, context, spec=spec)
 
             if response.text:
-                # Evaluate student response for Tutor agent
                 if spec.name == "Tutor":
-                    _evaluate_tutor_response(session_id, user_message, response.text)
-
+                    _post_tutor_response(session_id)
                 conv.add("user", user_message, agent_name=spec.name)
                 conv.add("assistant", response.text, agent_name=spec.name)
                 latency = (time.time() - start) * 1000
@@ -267,8 +276,7 @@ class Orchestrator:
             for msg in conv.get_recent(10):
                 if msg.role in ("user", "assistant"):
                     messages.append({"role": msg.role, "content": msg.content})
-            redacted_user = _redact_pii(user_message)
-            messages.append({"role": "user", "content": redacted_user})
+            messages.append({"role": "user", "content": user_message})
 
             text = LocalProvider.chat(
                 messages,
@@ -295,6 +303,10 @@ class Orchestrator:
         """Process a user message and stream tokens back. Yields (token, is_done)."""
         opts = options or TurnOptions()
         start = time.time()
+        
+        # Redact PII upfront so all agents and conversation history are safe
+        user_message = _redact_pii(user_message)
+        
         conv = self._get_conversation(session_id)
 
         dispatch = self.registry.dispatch(user_message)
@@ -311,13 +323,14 @@ class Orchestrator:
             )
 
             if spec.name == "Tutor":
+                _evaluate_tutor_response(session_id, user_message, "")
                 _inject_tutor_context(context, session_id)
 
-            response = self.runtime.process(user_message, context)
+            response = self.runtime.process(user_message, context, spec=spec)
 
             if response.text:
                 if spec.name == "Tutor":
-                    _evaluate_tutor_response(session_id, user_message, response.text)
+                    _post_tutor_response(session_id)
                 conv.add("user", user_message, agent_name=spec.name)
                 conv.add("assistant", response.text, agent_name=spec.name)
                 yield response.text, True

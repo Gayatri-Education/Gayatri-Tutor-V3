@@ -85,6 +85,7 @@ class SessionStore:
             """INSERT INTO sessions (id, title, created_at, updated_at, message_count)
                VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
+                   title = excluded.title,
                    updated_at = excluded.updated_at,
                    message_count = excluded.message_count""",
             (

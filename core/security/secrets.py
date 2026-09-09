@@ -223,8 +223,8 @@ class SecretsVault:
             json.dump(encrypted_data, f, indent=2)
         tmp_path.replace(self.vault_path)
 
-        # Set restrictive permissions (Windows)
-        if self._is_windows:
+        # Set restrictive permissions (non-Windows fallback)
+        if not self._is_windows:
             try:
                 os.chmod(self.vault_path, 0o600)
             except Exception:

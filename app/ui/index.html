@@ -314,6 +314,7 @@
       if (!msg) return;
 
       addMessage('user', msg);
+      addMessage('assistant', '');
       input.value = '';
       isGenerating = true;
       updateSendButton();
@@ -354,7 +355,7 @@
       }
       var content = last.querySelector('.message-content');
       if (content) {
-        content.textContent = currentTokens.join(' ');
+        content.textContent = currentTokens.join('');
       }
       chat.scrollTop = chat.scrollHeight;
     }

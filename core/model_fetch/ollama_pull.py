@@ -255,9 +255,9 @@ def pull_model(
     model_url = _get_blob_url(namespace, name, model_digest)
     model_path = dest_dir / LOCAL_MODEL_FILE
 
-    def _model_progress(downloaded: int, total: int):
+    def _model_progress(label: str, downloaded: int, total: int):
         if progress_callback:
-            progress_callback("model", downloaded, total)
+            progress_callback(label, downloaded, total)
 
     _download_blob(model_url, model_path, model_digest, _model_progress)
 

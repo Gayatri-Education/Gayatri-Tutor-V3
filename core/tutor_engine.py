@@ -24,6 +24,7 @@ class TutorContext:
     mastery: float = 0.3
     waiting_for_answer: bool = False
     last_response_type: str = "explain"  # explain, question, practice, feedback
+    last_attempt_correct: bool | None = None
 
     def to_prompt_context(self) -> str:
         """Build a context string for the model system prompt."""
@@ -67,8 +68,9 @@ class TutorEngine:
         ctx = self.get_or_create_context(session_id)
         current_id = ctx.current_concept_id
 
+        from core.config import LDG_MASTERY_THRESHOLD
         # If no current concept, or current is mastered, get next
-        if not current_id or self.ldg.get_mastery(current_id) >= self.ldg.__class__.__dict__.get("MASTERY_THRESHOLD", 0.85):
+        if not current_id or self.ldg.get_mastery(current_id) >= LDG_MASTERY_THRESHOLD:
             next_concept = self.ldg.get_next_concept(ctx.subject)
             if next_concept:
                 # Advance context
@@ -92,6 +94,7 @@ class TutorEngine:
         new_mastery = self.ldg.record_attempt(ctx.current_concept_id, correct, confidence)
         ctx.mastery = new_mastery
         ctx.last_response_type = "feedback" if ctx.waiting_for_answer else "explain"
+        ctx.last_attempt_correct = correct
         ctx.waiting_for_answer = False
 
         status = "correct" if correct else "incorrect"
