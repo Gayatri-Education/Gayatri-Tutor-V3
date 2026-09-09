@@ -345,8 +345,9 @@ class Orchestrator:
                 yield token, False
         except Exception as exc:
             logger.error(f"Streaming failed: {exc}")
-            yield f"[Error: {exc}]", True
-            return
+            error_text = f"[Error: {exc}]"
+            buffer.append(error_text)
+            yield error_text, True
 
         full_text = "".join(buffer)
         conv.add("user", user_message)

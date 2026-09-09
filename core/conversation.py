@@ -41,7 +41,8 @@ class Conversation:
                 # Preserve system messages, drop oldest user/assistant pairs
                 system_msgs = [m for m in self._messages if m.role == "system"]
                 other_msgs = [m for m in self._messages if m.role != "system"]
-                keep = other_msgs[-(self.max_messages - len(system_msgs)):]
+                num_keep = max(0, self.max_messages - len(system_msgs))
+                keep = other_msgs[-num_keep:] if num_keep > 0 else []
                 self._messages = system_msgs + keep
             logger.debug(f"[{self.session_id}] +{role} ({len(self._messages)} msgs)")
 

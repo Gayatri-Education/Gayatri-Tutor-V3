@@ -93,9 +93,12 @@ class SettingsStore:
 
     def set(self, key: str, value: Any) -> None:
         """Set a setting value with validation."""
-        if key in _SETTINGS_SCHEMA:
+        if key in _SETTINGS_SCHEMA and value is not None:
             expected_type = _SETTINGS_SCHEMA[key]
-            if value is not None and not isinstance(value, expected_type):
+            # Handle float allowing int
+            if expected_type is float and isinstance(value, int) and not isinstance(value, bool):
+                value = float(value)
+            elif not isinstance(value, expected_type):
                 raise ValueError(f"Setting '{key}' must be {expected_type.__name__}, got {type(value).__name__}")
 
         with self._lock:
@@ -112,9 +115,11 @@ class SettingsStore:
         """Update multiple settings at once."""
         with self._lock:
             for key, value in updates.items():
-                if key in _SETTINGS_SCHEMA:
+                if key in _SETTINGS_SCHEMA and value is not None:
                     expected_type = _SETTINGS_SCHEMA[key]
-                    if value is not None and not isinstance(value, expected_type):
+                    if expected_type is float and isinstance(value, int) and not isinstance(value, bool):
+                        value = float(value)
+                    elif not isinstance(value, expected_type):
                         raise ValueError(f"Setting '{key}' must be {expected_type.__name__}")
                 self._settings[key] = value
             self._save()

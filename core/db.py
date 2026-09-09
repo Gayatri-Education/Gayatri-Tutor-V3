@@ -36,8 +36,9 @@ def get_safe_db_connection(db_path: Path | str) -> sqlite3.Connection:
                 logger.error(f"Failed to backup corrupt database: {move_err}")
                 try:
                     db_path.unlink(missing_ok=True)
-                except Exception:
-                    pass
+                except Exception as unlink_err:
+                    logger.error(f"Failed to delete corrupt database: {unlink_err}")
+                    raise sqlite3.DatabaseError(f"Database is corrupt and cannot be backed up or deleted: {unlink_err}")
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
 

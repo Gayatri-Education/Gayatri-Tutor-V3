@@ -122,7 +122,7 @@ class SessionStore:
         conn = self.conn
         cursor = conn.execute(
             "SELECT role, content, agent_name, timestamp FROM messages "
-            "WHERE session_id = ? ORDER BY timestamp",
+            "WHERE session_id = ? ORDER BY id",
             (session_id,),
         )
         return [

@@ -260,6 +260,10 @@ class Bridge(QObject):
 
         Emits token signals with progress, done on success, error on failure.
         """
+        if getattr(self, '_download_active', False):
+            self.error.emit(json.dumps({"status": "error", "message": "Download already in progress"}))
+            return
+
         self._download_cancel = False
         self._download_active = True
 
