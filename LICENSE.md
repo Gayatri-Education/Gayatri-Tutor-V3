@@ -1,6 +1,6 @@
 # GAYATRI EDUCATION & DBERT EDUCATIONAL SOURCE-AVAILABLE LICENSE
 
-**Version 1.0**  
+**Version 3.0**  
 **Effective Date:** 2026
 
 **Copyright © 2026 Gayatri Education and the DBERT Internship Program. All Rights Reserved.**
