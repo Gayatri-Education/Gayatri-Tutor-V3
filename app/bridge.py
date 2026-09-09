@@ -1,0 +1,357 @@
+"""Gayatri AI — QWebChannel Bridge (JS ⇄ Python).
+
+Updated to use real settings persistence, provider management, and model catalog.
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+
+from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtWebEngineWidgets import QWebEngineView
+
+from core.logging_setup import setup_logging
+from core.model_fetch.ollama_pull import OllamaPullError
+
+logger = setup_logging()
+
+
+class Bridge(QObject):
+    """Exposes async slots and streaming signals to the UI via QWebChannel.
+
+    Signals (visible from JS):
+        token(int idx, str text) — streaming token
+        done() — response complete
+        error(str message) — error occurred
+    """
+
+    token = Signal(int, str)
+    done = Signal()
+    error = Signal(str)
+
+    def __init__(self, parent=None):
+        import uuid
+        super().__init__(parent)
+        self._view: QWebEngineView | None = None
+        self._orchestrator = None
+        self._generation_active = False
+        self._session_id = str(uuid.uuid4())
+
+    def _get_orchestrator(self):
+        """Lazy-load the orchestrator."""
+        if self._orchestrator is None:
+            from core.agents.default_agents import register_default_agents
+            from core.agents.registry import agent_registry
+            from core.agents.runtime import AgentRuntime
+            from core.orchestrator import Orchestrator
+            register_default_agents()
+
+            self._orchestrator = Orchestrator(
+                registry=agent_registry,
+                runtime=AgentRuntime(registry=agent_registry),
+            )
+        return self._orchestrator
+
+    def _save_current_session(self):
+        try:
+            if not self._orchestrator:
+                return
+            conv = self._orchestrator.get_conversation(self._session_id)
+            if conv and conv.get_all():
+                from core.session import get_session_store
+                store = get_session_store()
+                store.save_session(self._session_id, conv)
+        except Exception as exc:
+            logger.error(f"Failed to save session: {exc}")
+            self.error.emit(f"Warning: Failed to save session: {exc}")
+
+    def set_view(self, view: QWebEngineView):
+        self._view = view
+
+    # ── Slots (callable from JavaScript) ────────────────────────────────
+
+    @Slot(str)
+    def send_message(self, message: str):
+        """Receive a user message, route through agent/model, stream tokens back."""
+        orch = self._get_orchestrator()
+        self._generation_active = True
+
+        try:
+            for token, is_done in orch.stream(message, session_id=self._session_id):
+                if is_done:
+                    self._save_current_session()
+                    self.done.emit()
+                elif token:
+                    self.token.emit(0, token)
+        except Exception as exc:
+            logger.error(f"send_message error: {exc}")
+            self.error.emit(str(exc))
+            self.done.emit()
+        finally:
+            self._generation_active = False
+
+    @Slot()
+    def new_chat(self):
+        """Start a new conversation."""
+        import uuid
+        self._save_current_session()
+        self._session_id = str(uuid.uuid4())
+        orch = self._get_orchestrator()
+        orch.new_session(self._session_id)
+        logger.info(f"New chat started: {self._session_id}")
+
+    @Slot(result=str)
+    def get_sessions(self) -> str:
+        """Return list of past sessions as JSON."""
+        try:
+            from core.session import get_session_store
+            store = get_session_store()
+            sessions = store.list_sessions()
+            result = []
+            for s in sessions:
+                msgs = store.load_session(s["id"])
+                result.append({
+                    "id": s["id"],
+                    "title": s.get("title", s["id"][:20]),
+                    "created_at": s.get("created_at", ""),
+                    "updated_at": s.get("updated_at", ""),
+                    "message_count": s.get("message_count", len(msgs)),
+                    "preview": msgs[0]["content"][:80] if msgs else "",
+                })
+            return json.dumps({"ok": True, "sessions": result})
+        except Exception as exc:
+            logger.error(f"Error in get_sessions: {exc}")
+            return json.dumps({
+                "ok": False,
+                "sessions": [],
+                "error": str(exc),
+                "recoverable": True
+            })
+
+    @Slot(str, str)
+    def set_setting(self, key: str, value: str):
+        """Persist a setting (value is JSON-stringified from JS)."""
+        try:
+            from core.settings import get_settings
+            store = get_settings()
+            # Try to parse as JSON for non-string types
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                parsed = value
+            store.set(key, parsed)
+            logger.debug(f"Setting: {key} = {parsed!r}")
+        except Exception as exc:
+            logger.error(f"set_setting failed: {exc}")
+
+    @Slot(str, result=str)
+    def get_setting(self, key: str) -> str:
+        """Retrieve a setting as JSON string."""
+        try:
+            from core.settings import get_settings
+            store = get_settings()
+            value = store.get(key)
+            return json.dumps(value)
+        except Exception as exc:
+            logger.error(f"get_setting failed: {exc}")
+            return json.dumps(None)
+
+    @Slot(result=str)
+    def get_local_model_status(self) -> str:
+        """Return local model status as JSON."""
+        try:
+            from core.providers.local import LocalProvider
+            health = LocalProvider.health()
+
+            status = {
+                "installed": health["available"],
+                "name": "gemma-2-2b-it",
+                "provider": "local",
+                "reason_code": health["reason_code"],
+                "message": health["message"],
+                "path": health["path"]
+            }
+            if health["available"] or health["reason_code"] not in ("missing_file", "invalid_file"):
+                status["size_mb"] = LocalProvider.MODEL_PATH.stat().st_size / (1024 * 1024) if LocalProvider.MODEL_PATH.exists() else 0
+
+            return json.dumps(status)
+        except Exception as exc:
+            logger.error(f"get_local_model_status error: {exc}")
+            return json.dumps({"installed": False, "error": str(exc), "reason_code": "unknown_error"})
+
+    @Slot(result=str)
+    def get_providers(self) -> str:
+        """Return list of configured providers with status as JSON."""
+        try:
+            from core.providers.registry import get_registry
+            from core.security.secrets import get_vault
+
+            vault = get_vault()
+            registry = get_registry()
+
+            providers = []
+            for p in registry.list_providers():
+                providers.append({
+                    "key": p["key"],
+                    "name": p["name"],
+                    "has_key": vault.has_key(p["key"]),
+                    "available": p["available"],
+                })
+            return json.dumps(providers)
+        except Exception as exc:
+            logger.error(f"get_providers error: {exc}")
+            return json.dumps([])
+
+    @Slot(str, str, result=str)
+    def validate_provider_key(self, provider_key: str, api_key: str) -> str:
+        """Validate a provider API key. Returns JSON with result."""
+        try:
+            from core.providers.registry import get_registry
+            registry = get_registry()
+            provider = registry.get(provider_key)
+
+            if provider is None:
+                return json.dumps({"valid": False, "message": f"Provider '{provider_key}' not found"})
+
+            # Temporarily set the key
+            if hasattr(provider, '_api_key'):
+                old_key = provider._api_key
+                provider._api_key = api_key
+                valid, msg = provider.validate_key()
+                provider._api_key = old_key
+            else:
+                valid, msg = False, "Provider doesn't support key validation"
+
+            return json.dumps({"valid": valid, "message": msg})
+        except Exception as exc:
+            logger.error(f"validate_provider_key error: {exc}")
+            return json.dumps({"valid": False, "message": str(exc)[:200]})
+
+    @Slot(str, str)
+    def save_provider_key(self, provider_key: str, api_key: str):
+        """Save a provider API key to the vault."""
+        try:
+            from core.security.secrets import get_vault
+            vault = get_vault()
+            vault.store_key(provider_key, api_key)
+            logger.info(f"Provider key saved: {provider_key}")
+        except Exception as exc:
+            logger.error(f"save_provider_key error: {exc}")
+            self.error.emit(f"Failed to save key: {exc}")
+
+    @Slot(result=str)
+    def get_model_catalog(self) -> str:
+        """Return unified model catalog as JSON."""
+        try:
+            from core.providers.registry import get_registry
+            registry = get_registry()
+            catalog = registry.to_catalog_dict()
+            return json.dumps(catalog)
+        except Exception as exc:
+            logger.error(f"get_model_catalog error: {exc}")
+            return json.dumps([])
+
+    # ── Model Download ─────────────────────────────────────────────────────
+
+    @Slot()
+    def download_model(self):
+        """Download the model file from Ollama registry in a background thread.
+
+        Emits token signals with progress, done on success, error on failure.
+        """
+        self._download_cancel = False
+        self._download_active = True
+
+        def _run():
+            try:
+                from core.model_fetch.ollama_pull import pull_model
+
+                def progress(label, downloaded, total):
+                    if self._download_cancel:
+                        raise OllamaPullError("Cancelled by user")
+                    if total > 0:
+                        pct = downloaded / total * 100
+                        mb = downloaded / 1024 / 1024
+                        total_mb = total / 1024 / 1024
+                        self.token.emit(0, f"Downloading {label}: {mb:.0f}/{total_mb:.0f} MB ({pct:.0f}%)")
+                    else:
+                        mb = downloaded / 1024 / 1024
+                        self.token.emit(0, f"Downloading {label}: {mb:.0f} MB...")
+
+                result = pull_model(progress_callback=progress)
+                size_mb = result["size_mb"]
+                self.token.emit(0, f"Download complete: {size_mb:.1f} MB")
+                self.token.emit(0, f"Saved to: {result['path']}")
+                self.token.emit(0, f"Digest: {result['digest'][:16]}...")
+                self.done.emit()
+
+            except OllamaPullError as exc:
+                logger.error(f"Model download failed: {exc}")
+                self.error.emit(json.dumps({"status": "error", "message": str(exc)[:300]}))
+                self.done.emit()
+            except Exception as exc:
+                logger.error(f"Model download unexpected error: {exc}")
+                self.error.emit(json.dumps({"status": "error", "message": str(exc)[:300]}))
+                self.done.emit()
+            finally:
+                self._download_active = False
+                self._download_cancel = False
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+
+    @Slot()
+    def cancel_model_download(self):
+        """Cancel an in-progress model download."""
+        self._download_cancel = True
+        logger.info("Model download cancel requested")
+
+    @Slot(result=str)
+    def install_model(self) -> str:
+        """One-shot install: check availability, then download if needed.
+
+        Returns JSON with status. If download is needed, starts async download
+        and returns immediately with status "downloading".
+        """
+        try:
+            from core.config import LOCAL_MODEL_FILE, MODELS_DIR
+            local = MODELS_DIR / LOCAL_MODEL_FILE
+            if local.exists():
+                size_mb = local.stat().st_size / 1024 / 1024
+                return json.dumps({
+                    "status": "installed",
+                    "path": str(local),
+                    "size_mb": round(size_mb, 1),
+                })
+
+            # Not installed — check if we can start a download
+            # The UI will show the model as "not installed" and offer download options
+            return json.dumps({
+                "status": "not_installed",
+                "message": "Model not found. Use download_model to fetch it.",
+                "expected_path": str(local),
+            })
+
+        except Exception as exc:
+            logger.error(f"install_model error: {exc}")
+            return json.dumps({"status": "error", "message": str(exc)[:200]})
+
+    @Slot(str)
+    def load_session_id(self, session_id: str):
+        """Load a previous session into the active conversation."""
+        try:
+            self._save_current_session()
+            from core.session import get_session_store
+
+            store = get_session_store()
+            messages = store.load_session(session_id)
+
+            orch = self._get_orchestrator()
+            orch.load_session(session_id, messages)
+            self._session_id = session_id
+
+            logger.info(f"Loaded session {session_id}: {len(messages)} messages")
+        except Exception as exc:
+            logger.error(f"load_session_id error: {exc}")
+            self.error.emit(str(exc))
