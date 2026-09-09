@@ -70,6 +70,6 @@ This repository is publicly available for educational, academic, research, and p
 
 Commercial use, redistribution, resale, incorporation into commercial products or services, SaaS deployment, and development of competing commercial products are strictly prohibited without prior written permission from Gayatri Education.
 
-Please see the [LICENSE](LICENSE) file for the complete terms.
+Please see the [LICENSE.md](LICENSE.md) file for the complete terms.
 
 *Copyright © 2026 Gayatri Education. All Rights Reserved.*
