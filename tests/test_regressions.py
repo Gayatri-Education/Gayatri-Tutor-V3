@@ -27,7 +27,9 @@ def test_regression_bug_3_pii_multiple_matches():
     redactor = PIIRedactor()
     text = "Contact alice@example.com and bob@example.com"
     redacted = redactor.redact(text)
-    assert redacted.clean_text == "Contact [EMAIL] and [EMAIL]"
+    import re
+    assert re.match(r"Contact \[EMAIL_0_[a-f0-9]{8}\] and \[EMAIL_1_[a-f0-9]{8}\]", redacted.clean_text)
+    assert redacted.restore(redacted.clean_text) == text
 
 def test_regression_bug_6_tutor_prerequisites_key():
     """Bug #6: Tutor 'prerequisites not met' instruction never sent to model."""

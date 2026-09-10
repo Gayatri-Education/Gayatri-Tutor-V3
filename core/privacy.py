@@ -90,14 +90,16 @@ class PIIRedactor:
         if not self.enabled or not text:
             return RedactionResult(clean_text=text, has_pii=False)
 
+        import secrets
+        run_id = secrets.token_hex(4)
         matches: list[PIIMatch] = []
         result_text = text
-        offset = 0  # cumulative offset from replacements
 
         for pii_type, pattern in self.PATTERNS:
             def replacer(match: re.Match) -> str:
                 original = match.group(0)
-                placeholder = f"[{pii_type}]"
+                idx = len(matches)
+                placeholder = f"[{pii_type}_{idx}_{run_id}]"
                 matches.append(PIIMatch(
                     pii_type=pii_type,
                     placeholder=placeholder,
