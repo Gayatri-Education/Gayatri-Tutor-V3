@@ -35,6 +35,9 @@ class SecretsVault:
     def __init__(self, vault_path: str | Path | None = None):
         self.vault_path = Path(vault_path) if vault_path else SETTINGS_PATH.parent / "secrets.enc"
         self._is_windows = os.name == "nt"
+        self._corrupted_keys: dict[str, str] = {}
+        import threading
+        self._lock = threading.Lock()
 
     def _encrypt(self, plaintext: str) -> bytes:
         """Encrypt a string using platform-appropriate method."""
@@ -42,6 +45,8 @@ class SecretsVault:
             return self._dpapi_encrypt(plaintext)
         else:
             # Development fallback — NOT secure
+            if os.environ.get("ALLOW_INSECURE_SECRET_STORAGE", "").lower() != "true":
+                raise RuntimeError("Secure secret storage is not supported on this platform. Set ALLOW_INSECURE_SECRET_STORAGE=true to enable insecure base64 storage for development.")
             logger.warning("DPAPI unavailable — using base64 encoding (dev only)")
             import base64
             return base64.b64encode(plaintext.encode("utf-8"))
@@ -51,6 +56,8 @@ class SecretsVault:
         if self._is_windows:
             return self._dpapi_decrypt(ciphertext)
         else:
+            if os.environ.get("ALLOW_INSECURE_SECRET_STORAGE", "").lower() != "true":
+                raise RuntimeError("Secure secret storage is not supported on this platform. Set ALLOW_INSECURE_SECRET_STORAGE=true to enable insecure base64 storage for development.")
             import base64
             return base64.b64decode(ciphertext).decode("utf-8")
 
@@ -135,40 +142,39 @@ class SecretsVault:
         return decrypted.decode("utf-8")
 
     def store_key(self, provider_key: str, api_key: str) -> None:
-        """Store an API key securely.
-
-        Args:
-            provider_key: Machine key (e.g. "openai", "anthropic")
-            api_key: The API key to store
-        """
-        # Load existing vault
-        vault = self._load_vault()
-        vault[provider_key] = api_key
-        self._save_vault(vault)
-        logger.info(f"Key stored: {provider_key}")
+        """Store an API key securely."""
+        with self._lock:
+            vault = self._load_vault()
+            vault[provider_key] = api_key
+            # If we overwrote a corrupted key, remove it from the corrupted dict
+            self._corrupted_keys.pop(provider_key, None)
+            self._save_vault(vault)
+            logger.info(f"Key stored: {provider_key}")
 
     def retrieve_key(self, provider_key: str) -> str | None:
-        """Retrieve a stored API key.
-
-        Args:
-            provider_key: Machine key (e.g. "openai", "anthropic")
-
-        Returns:
-            The API key, or None if not found
-        """
-        vault = self._load_vault()
-        key = vault.get(provider_key)
-        if key:
-            logger.debug(f"Key retrieved: {provider_key}")
-        return key
+        """Retrieve a stored API key."""
+        with self._lock:
+            vault = self._load_vault()
+            key = vault.get(provider_key)
+            if key:
+                logger.debug(f"Key retrieved: {provider_key}")
+            return key
 
     def delete_key(self, provider_key: str) -> None:
         """Delete a stored API key."""
-        vault = self._load_vault()
-        if provider_key in vault:
-            del vault[provider_key]
-            self._save_vault(vault)
-            logger.info(f"Key deleted: {provider_key}")
+        with self._lock:
+            vault = self._load_vault()
+            changed = False
+            if provider_key in vault:
+                del vault[provider_key]
+                changed = True
+            if provider_key in self._corrupted_keys:
+                del self._corrupted_keys[provider_key]
+                changed = True
+            
+            if changed:
+                self._save_vault(vault)
+                logger.info(f"Key deleted: {provider_key}")
 
     def list_keys(self) -> list[str]:
         """List provider keys that have stored secrets (not the keys themselves)."""
@@ -189,6 +195,7 @@ class SecretsVault:
                 encrypted_data = json.loads(f.read().decode("utf-8"))
 
             vault = {}
+            self._corrupted_keys.clear()
             for key, encrypted_b64 in encrypted_data.items():
                 try:
                     import base64
@@ -196,7 +203,8 @@ class SecretsVault:
                     vault[key] = self._decrypt(encrypted)
                 except Exception as exc:
                     logger.error(f"Failed to decrypt key {key}: {exc}")
-                    # Skip corrupted entries
+                    # Keep corrupted entries
+                    self._corrupted_keys[key] = encrypted_b64
                     continue
             return vault
         except Exception as exc:
@@ -208,11 +216,17 @@ class SecretsVault:
         self.vault_path.parent.mkdir(parents=True, exist_ok=True)
 
         encrypted_data = {}
+        # Keep corrupted entries so they aren't lost
+        for k, v in self._corrupted_keys.items():
+            encrypted_data[k] = v
+
         for key, plaintext in vault.items():
             try:
                 encrypted = self._encrypt(plaintext)
                 import base64
                 encrypted_data[key] = base64.b64encode(encrypted).decode("utf-8")
+                # If we successfully updated a previously corrupted key, it's no longer corrupted
+                self._corrupted_keys.pop(key, None)
             except Exception as exc:
                 logger.error(f"Failed to encrypt key {key}: {exc}")
                 raise
@@ -221,7 +235,9 @@ class SecretsVault:
         tmp_path = self.vault_path.with_suffix(".tmp")
         with open(tmp_path, "w") as f:
             json.dump(encrypted_data, f, indent=2)
-        tmp_path.replace(self.vault_path)
+        
+        # On Windows, os.replace works safely in Python 3.3+
+        os.replace(tmp_path, self.vault_path)
 
         # Set restrictive permissions (non-Windows fallback)
         if not self._is_windows:
