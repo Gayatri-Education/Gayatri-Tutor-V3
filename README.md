@@ -73,3 +73,12 @@ Commercial use, redistribution, resale, incorporation into commercial products o
 Please see the [LICENSE.md](LICENSE.md) file for the complete terms.
 
 *Copyright © 2026 Gayatri Education. All Rights Reserved.*
+
+
+## 🤝 Contributing & Help Wanted
+
+We recently conducted a comprehensive audit and found several issues that need to be addressed. We are actively looking for open-source contributors on GitHub to help us fix them!
+
+Please see the [Comprehensive Audit Document](gayatri_tutor_v3_comprehensive_audit_and_fix.md) for a full list of issues marked with **[HELP WANTED]**. 
+
+To get started, read our [CONTRIBUTING.md](CONTRIBUTING.md) guide. We welcome all Pull Requests!
