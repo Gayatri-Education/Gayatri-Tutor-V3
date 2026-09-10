@@ -84,24 +84,32 @@ class TutorEngine:
 
         return self.ldg.get_concept(ctx.current_concept_id) if ctx.current_concept_id else None
 
-    def record_student_response(self, session_id: str, correct: bool,
+    def record_student_response(self, session_id: str, correct: bool | None,
                                 confidence: float = 1.0) -> float:
         """Record a student's answer and update mastery."""
         ctx = self.get_or_create_context(session_id)
         if not ctx.current_concept_id:
             return 0.0
 
-        new_mastery = self.ldg.record_attempt(ctx.current_concept_id, correct, confidence)
-        ctx.mastery = new_mastery
+        if correct is not None:
+            new_mastery = self.ldg.record_attempt(ctx.current_concept_id, correct, confidence)
+            ctx.mastery = new_mastery
+            status = "correct" if correct else "incorrect"
+            logger.info(
+                f"Student {status} on {ctx.current_concept_name}: "
+                f"mastery={new_mastery:.3f}"
+            )
+        else:
+            new_mastery = ctx.mastery
+            logger.info(
+                f"Student response uncertain on {ctx.current_concept_name}: "
+                f"mastery remains {new_mastery:.3f}"
+            )
+
         ctx.last_response_type = "feedback" if ctx.waiting_for_answer else "explain"
         ctx.last_attempt_correct = correct
         ctx.waiting_for_answer = False
 
-        status = "correct" if correct else "incorrect"
-        logger.info(
-            f"Student {status} on {ctx.current_concept_name}: "
-            f"mastery={new_mastery:.3f}"
-        )
         return new_mastery
 
     def set_waiting_for_answer(self, session_id: str) -> None:
