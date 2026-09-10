@@ -163,11 +163,8 @@ def _evaluate_tutor_response(session_id: str, user_message: str, agent_response:
             # Negative responses
             elif lower_msg.startswith(("no", "nope", "wrong", "incorrect", "not")):
                 correct = False
-            # Longer responses likely attempt an answer
-            elif len(lower_msg) > 20:
-                correct = True  # assume attempt is correct unless clearly wrong
             else:
-                correct = True  # default: assume correct for positive reinforcement
+                correct = None  # uncertain, do not increase mastery
 
             mastery = tutor.record_student_response(session_id, correct=correct)
             logger.info(
