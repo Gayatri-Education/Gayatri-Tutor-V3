@@ -92,6 +92,11 @@ class TutorEngine:
             self.session_contexts[session_id] = context
             self.save_context(session_id)
 
+    def clear_session(self, session_id: str) -> None:
+        """Clear teaching context for a session."""
+        with self._lock:
+            self.session_contexts.pop(session_id, None)
+
     def get_next_concept_for_session(self, session_id: str) -> Any:
         """Get the next concept to teach, advancing from current if mastered."""
         with self._lock:

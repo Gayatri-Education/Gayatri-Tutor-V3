@@ -36,8 +36,9 @@ class InstallHook:
         self._active = False
 
     def model_exists(self) -> bool:
-        """Check if the local model is already downloaded."""
-        return self.EXPECTED_MODEL.exists() and self.EXPECTED_MODEL.stat().st_size > 1_000_000
+        """Check if the local model is already downloaded and structurally healthy."""
+        from core.providers.local import LocalProvider
+        return bool(LocalProvider.health().get("available", False))
 
     def model_size_mb(self) -> float:
         """Return model size in MB, 0 if not installed."""
@@ -138,15 +139,17 @@ class InstallHook:
                 complete_callback(result)
 
         except OllamaPullError as exc:
-            msg = str(exc)
-            logger.error(f"Install failed: {msg}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="install_hook_download")
+            logger.error(f"Install failed: {exc}")
             if error_callback:
-                error_callback(msg)
+                error_callback(sanitized.user_message)
         except Exception as exc:
-            msg = str(exc)
-            logger.error(f"Install unexpected error: {msg}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="install_hook_download")
+            logger.error(f"Install unexpected error: {exc}")
             if error_callback:
-                error_callback(msg)
+                error_callback(sanitized.user_message)
         finally:
             self._active = False
 

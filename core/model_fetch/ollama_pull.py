@@ -150,13 +150,119 @@ def _verify_sha256(filepath: Path, expected_digest: str) -> bool:
     return matches
 
 
+def check_disk_space(
+    dest_dir: Path,
+    required_bytes: int,
+    safety_margin_bytes: int = 100 * 1024 * 1024,
+) -> None:
+    """Validate that dest_dir has sufficient free disk space before downloading (Audit #59).
+
+    Args:
+        dest_dir: Directory where files will be stored.
+        required_bytes: Total expected download size in bytes.
+        safety_margin_bytes: Safety headroom in bytes (default 100 MB).
+
+    Raises:
+        OllamaPullError: If available free space is less than required + safety margin.
+    """
+    import shutil
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    try:
+        usage = shutil.disk_usage(dest)
+        total_needed = required_bytes + safety_margin_bytes
+        if usage.free < total_needed:
+            free_mb = usage.free / (1024 * 1024)
+            needed_mb = total_needed / (1024 * 1024)
+            req_mb = required_bytes / (1024 * 1024)
+            margin_mb = safety_margin_bytes / (1024 * 1024)
+            raise OllamaPullError(
+                f"Insufficient disk space in '{dest}': requires {req_mb:.1f} MB + "
+                f"{margin_mb:.1f} MB safety margin ({needed_mb:.1f} MB total), "
+                f"but only {free_mb:.1f} MB is available."
+            )
+    except OSError as exc:
+        logger.warning(f"Could not check disk usage for {dest}: {exc}")
+
+
+def save_model_metadata(
+    dest_dir: Path,
+    model_file: str,
+    digest: str,
+    namespace: str,
+    name: str,
+    tag: str,
+    size_bytes: int,
+    has_chat_template: bool = False,
+    has_params: bool = False,
+) -> Path:
+    """Persist verified installation metadata alongside the model (Audit #44)."""
+    import json
+    from datetime import datetime, timezone
+    meta = {
+        "namespace": namespace,
+        "name": name,
+        "tag": tag,
+        "file_name": model_file,
+        "digest": digest,
+        "size_bytes": size_bytes,
+        "has_chat_template": has_chat_template,
+        "has_params": has_params,
+        "verified_at": datetime.now(timezone.utc).isoformat(),
+    }
+    meta_path = Path(dest_dir) / f"{model_file}.meta.json"
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+    logger.info(f"Saved model metadata: {meta_path}")
+    return meta_path
+
+
+def get_model_metadata(
+    dest_dir: Path | None = None,
+    model_file: str | None = None,
+) -> dict | None:
+    """Retrieve persisted model installation metadata if present (Audit #44)."""
+    import json
+    from core.config import LOCAL_MODEL_FILE, MODELS_DIR
+    dest = Path(dest_dir) if dest_dir else MODELS_DIR
+    fname = model_file or LOCAL_MODEL_FILE
+    meta_path = dest / f"{fname}.meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as exc:
+        logger.warning(f"Failed to read model metadata from {meta_path}: {exc}")
+        return None
+
+
+def cleanup_partial_downloads(dest_dir: Path | None = None) -> list[str]:
+    """Clean up any leftover .part files in dest_dir (Audit #41)."""
+    from core.config import MODELS_DIR
+    dest = Path(dest_dir) if dest_dir else MODELS_DIR
+    cleaned = []
+    if dest.exists():
+        for p in dest.glob("*.part"):
+            try:
+                p.unlink(missing_ok=True)
+                cleaned.append(p.name)
+                logger.info(f"Removed partial download: {p.name}")
+            except Exception as exc:
+                logger.warning(f"Failed to remove partial download {p.name}: {exc}")
+    return cleaned
+
+
 def _download_blob(
     url: str,
     dest: Path,
     expected_digest: str,
     progress_callback: Callable[[str, int, int], None] | None = None,
 ) -> None:
-    """Download a blob with resumable Range requests and digest verification.
+    """Download a blob with resumable Range requests, .part isolation, and digest verification.
+
+    Audit #40: Validates Content-Range header start offset on HTTP 206 responses.
+    Audit #41: Writes to a .part file and atomically renames only after digest verification.
 
     Args:
         url: Download URL
@@ -164,42 +270,91 @@ def _download_blob(
         expected_digest: Expected sha256 digest
         progress_callback: Optional callback(label, downloaded, total)
     """
+    import os
     import httpx
 
+    # If destination already exists and matches expected digest, skip download
+    if dest.exists():
+        if _verify_sha256(dest, expected_digest):
+            logger.info(f"Blob already exists and verified: {dest.name}")
+            return
+        logger.warning(f"Existing file {dest.name} failed digest check, will re-download")
+        dest.unlink(missing_ok=True)
+
+    # Use a .part temporary file while downloading to avoid exposing partial/corrupt files (Audit #41)
+    part_file = dest.with_name(dest.name + ".part")
     downloaded = 0
     headers = {}
 
-    # Check for partial download
-    if dest.exists():
-        downloaded = dest.stat().st_size
+    # Check for resumable partial download
+    if part_file.exists():
+        downloaded = part_file.stat().st_size
         if downloaded > 0:
             headers["Range"] = f"bytes={downloaded}-"
-            logger.info(f"Resuming download: {downloaded / 1024 / 1024:.1f} MB already downloaded")
+            logger.info(f"Resuming download: {downloaded / 1024 / 1024:.1f} MB already downloaded in .part")
 
     try:
         with httpx.stream("GET", url, headers=headers, timeout=300.0, follow_redirects=True) as response:
             if response.status_code == 200:
-                # Full download
+                # Full download from start
                 mode = "wb"
                 downloaded = 0
                 total = int(response.headers.get("content-length", 0))
                 logger.info(f"Downloading: {url.split('/')[-1][:40]} ({total / 1024 / 1024:.1f} MB)")
             elif response.status_code == 206:
-                # Resume accepted
-                mode = "ab"
-                content_range = response.headers.get("content-range", "")
-                total_str = content_range.split("/")[-1] if "/" in content_range else "0"
-                total = int(total_str) if total_str.isdigit() else 0
-                logger.info(f"Resuming from {downloaded / 1024 / 1024:.1f} MB")
+                # Resume accepted — validate Content-Range header (Audit #40)
+                content_range = response.headers.get("content-range", "").strip()
+                range_start = None
+                total = 0
+                if content_range.lower().startswith("bytes "):
+                    spec = content_range[6:].strip()
+                    if "/" in spec:
+                        range_part, total_str = spec.split("/", 1)
+                        if "-" in range_part:
+                            s_str = range_part.split("-")[0]
+                            if s_str.isdigit():
+                                range_start = int(s_str)
+                        if total_str.isdigit():
+                            total = int(total_str)
+
+                # Validate Content-Range start matches downloaded offset
+                if range_start is not None and range_start != downloaded:
+                    logger.warning(
+                        f"Content-Range start mismatch: expected {downloaded}, server returned {range_start}. "
+                        "Resetting partial file and restarting full download."
+                    )
+                    mode = "wb"
+                    downloaded = 0
+                else:
+                    mode = "ab"
+                    logger.info(f"Resuming from {downloaded / 1024 / 1024:.1f} MB")
+            elif response.status_code == 416:
+                # Range not satisfiable — partial file may be corrupt or offset exceeds size
+                logger.warning(f"HTTP 416 Range Not Satisfiable for {part_file.name}. Truncating and re-downloading.")
+                part_file.unlink(missing_ok=True)
+                mode = "wb"
+                downloaded = 0
+                with httpx.stream("GET", url, timeout=300.0, follow_redirects=True) as full_resp:
+                    if full_resp.status_code != 200:
+                        raise OllamaPullError(f"HTTP {full_resp.status_code} on re-download: {full_resp.text[:200]}")
+                    total = int(full_resp.headers.get("content-length", 0))
+                    with open(part_file, "wb") as f:
+                        for chunk in full_resp.iter_bytes(chunk_size=1024 * 1024):
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if progress_callback:
+                                progress_callback("model", downloaded, total)
+                    response = full_resp
             else:
                 raise OllamaPullError(f"HTTP {response.status_code}: {response.text[:200]}")
 
-            with open(dest, mode) as f:
-                for chunk in response.iter_bytes(chunk_size=1024 * 1024):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if progress_callback:
-                        progress_callback("model", downloaded, total)
+            if response.status_code in (200, 206):
+                with open(part_file, mode) as f:
+                    for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback:
+                            progress_callback("model", downloaded, total)
 
     except httpx.HTTPStatusError as exc:
         raise OllamaPullError(f"Download failed: HTTP {exc.response.status_code}") from exc
@@ -208,10 +363,14 @@ def _download_blob(
 
     logger.info(f"Download complete: {downloaded / 1024 / 1024:.1f} MB")
 
-    # Verify digest
-    if not _verify_sha256(dest, expected_digest):
-        dest.unlink(missing_ok=True)
-        raise OllamaPullError(f"Digest verification failed for {dest.name}")
+    # Verify digest on the downloaded .part file before promoting
+    if not _verify_sha256(part_file, expected_digest):
+        part_file.unlink(missing_ok=True)
+        raise OllamaPullError(f"Digest verification failed for {part_file.name}")
+
+    # Atomically promote verified partial file to destination (Audit #41)
+    os.replace(part_file, dest)
+    logger.info(f"Atomically promoted verified blob to {dest}")
 
 
 def pull_model(
@@ -245,6 +404,10 @@ def pull_model(
 
     # 1. Fetch manifest
     manifest = _get_manifest(namespace, name, tag)
+
+    # Preflight disk space check before starting download (Audit #59)
+    total_required = sum(int(l.get("size", 0)) for l in manifest.layers if "size" in l)
+    check_disk_space(dest_dir, total_required)
 
     # 2. Download model blob (GGUF)
     model_blob = manifest.model_blob
@@ -285,6 +448,19 @@ def pull_model(
 
     size_mb = model_path.stat().st_size / 1024 / 1024
     logger.info(f"Pull complete: {model_path} ({size_mb:.1f} MB)")
+
+    # 5. Persist verified model metadata (Audit #44)
+    save_model_metadata(
+        dest_dir=dest_dir,
+        model_file=LOCAL_MODEL_FILE,
+        digest=model_digest,
+        namespace=namespace,
+        name=name,
+        tag=tag,
+        size_bytes=model_path.stat().st_size,
+        has_chat_template=system_blob is not None,
+        has_params=params_blob is not None,
+    )
 
     return {
         "namespace": namespace,
