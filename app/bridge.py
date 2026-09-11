@@ -407,22 +407,22 @@ class Bridge(QObject):
         and returns immediately with status "downloading".
         """
         try:
-            from core.config import LOCAL_MODEL_FILE, MODELS_DIR
-            local = MODELS_DIR / LOCAL_MODEL_FILE
-            if local.exists():
-                size_mb = local.stat().st_size / 1024 / 1024
+            from core.providers.local import LocalProvider
+            health = LocalProvider.health()
+            if health["available"]:
+                size_mb = LocalProvider.MODEL_PATH.stat().st_size / 1024 / 1024
                 return json.dumps({
                     "status": "installed",
-                    "path": str(local),
+                    "path": str(LocalProvider.MODEL_PATH),
                     "size_mb": round(size_mb, 1),
                 })
 
-            # Not installed — check if we can start a download
-            # The UI will show the model as "not installed" and offer download options
+            # Not installed or incomplete — return health reason
             return json.dumps({
                 "status": "not_installed",
-                "message": "Model not found. Use download_model to fetch it.",
-                "expected_path": str(local),
+                "message": health["message"],
+                "reason_code": health["reason_code"],
+                "expected_path": str(LocalProvider.MODEL_PATH),
             })
 
         except Exception as exc:

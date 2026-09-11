@@ -162,7 +162,17 @@ class LocalProvider:
     def health(cls) -> dict:
         """Return structured health status of the local model without forcing heavy model load."""
         model_path = cls.MODEL_PATH
+        part_path = model_path.with_name(model_path.name + ".part")
+
         if not model_path.exists():
+            if part_path.exists():
+                part_size_mb = part_path.stat().st_size / (1024 * 1024)
+                return {
+                    "available": False,
+                    "reason_code": "download_incomplete",
+                    "message": f"Model download is incomplete ({part_size_mb:.1f} MB partial file found). Please resume or complete download.",
+                    "path": str(model_path)
+                }
             return {
                 "available": False,
                 "reason_code": "missing_file",
@@ -178,6 +188,22 @@ class LocalProvider:
                 "message": f"Model file is only {actual_size} bytes, likely a failed download.",
                 "path": str(model_path)
             }
+
+        # Check installation metadata if present for fast structural verification (Audit #41 & #44)
+        try:
+            from core.model_fetch.ollama_pull import get_model_metadata
+            meta = get_model_metadata(dest_dir=model_path.parent, model_file=model_path.name)
+            if meta and meta.get("size_bytes"):
+                expected_bytes = meta["size_bytes"]
+                if actual_size != expected_bytes:
+                    return {
+                        "available": False,
+                        "reason_code": "corrupt_file",
+                        "message": f"Model file size ({actual_size} bytes) does not match verified installation metadata ({expected_bytes} bytes).",
+                        "path": str(model_path)
+                    }
+        except Exception:
+            pass
 
         try:
             import llama_cpp  # verify dependency without loading model
