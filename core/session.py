@@ -61,6 +61,20 @@ class SessionStore:
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS tutor_contexts (
+                session_id           TEXT PRIMARY KEY,
+                current_concept_id   TEXT DEFAULT '',
+                current_concept_name TEXT DEFAULT '',
+                concept_description  TEXT DEFAULT '',
+                subject              TEXT DEFAULT '',
+                mastery              REAL DEFAULT 0.3,
+                waiting_for_answer   INTEGER DEFAULT 0,
+                last_response_type   TEXT DEFAULT 'explain',
+                last_attempt_correct INTEGER,
+                updated_at           TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            );
+
             CREATE INDEX IF NOT EXISTS idx_messages_session
                 ON messages(session_id);
             CREATE INDEX IF NOT EXISTS idx_messages_timestamp
@@ -69,12 +83,13 @@ class SessionStore:
         conn.commit()
         logger.info(f"Session DB ready: {self.db_path}")
 
-    def save_session(self, session_id: str, conversation: Any) -> None:
-        """Save a conversation to the database.
+    def save_session(self, session_id: str, conversation: Any, tutor_context: Any = None) -> None:
+        """Save a conversation and optional tutor context to the database.
 
         Args:
             session_id: Unique session identifier
             conversation: Conversation object with get_all() method
+            tutor_context: Optional TutorContext object
         """
         conn = self.conn
         now = datetime.now().isoformat()
@@ -113,6 +128,88 @@ class SessionStore:
             )
         conn.commit()
         logger.debug(f"Saved session {session_id}: {len(messages)} messages")
+
+        if tutor_context is not None:
+            self.save_tutor_context(session_id, tutor_context)
+
+    def save_tutor_context(self, session_id: str, ctx: Any) -> None:
+        """Save tutor teaching state for a session."""
+        if not ctx:
+            return
+        conn = self.conn
+        now = datetime.now().isoformat()
+
+        waiting = 1 if getattr(ctx, "waiting_for_answer", False) else 0
+        last_correct = getattr(ctx, "last_attempt_correct", None)
+        if last_correct is True:
+            last_correct_int = 1
+        elif last_correct is False:
+            last_correct_int = 0
+        else:
+            last_correct_int = None
+
+        conn.execute(
+            """INSERT INTO tutor_contexts (
+                   session_id, current_concept_id, current_concept_name,
+                   concept_description, subject, mastery, waiting_for_answer,
+                   last_response_type, last_attempt_correct, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(session_id) DO UPDATE SET
+                   current_concept_id = excluded.current_concept_id,
+                   current_concept_name = excluded.current_concept_name,
+                   concept_description = excluded.concept_description,
+                   subject = excluded.subject,
+                   mastery = excluded.mastery,
+                   waiting_for_answer = excluded.waiting_for_answer,
+                   last_response_type = excluded.last_response_type,
+                   last_attempt_correct = excluded.last_attempt_correct,
+                   updated_at = excluded.updated_at""",
+            (
+                session_id,
+                getattr(ctx, "current_concept_id", ""),
+                getattr(ctx, "current_concept_name", ""),
+                getattr(ctx, "concept_description", ""),
+                getattr(ctx, "subject", ""),
+                float(getattr(ctx, "mastery", 0.3)),
+                waiting,
+                getattr(ctx, "last_response_type", "explain"),
+                last_correct_int,
+                now,
+            ),
+        )
+        conn.commit()
+        logger.debug(f"Saved tutor context for session {session_id}")
+
+    def load_tutor_context(self, session_id: str) -> Any:
+        """Load tutor context for a session."""
+        conn = self.conn
+        row = conn.execute(
+            """SELECT current_concept_id, current_concept_name, concept_description,
+                      subject, mastery, waiting_for_answer, last_response_type,
+                      last_attempt_correct
+               FROM tutor_contexts WHERE session_id = ?""",
+            (session_id,),
+        ).fetchone()
+        if not row:
+            return None
+
+        from core.tutor_engine import TutorContext
+        last_correct = None
+        if row["last_attempt_correct"] == 1:
+            last_correct = True
+        elif row["last_attempt_correct"] == 0:
+            last_correct = False
+
+        return TutorContext(
+            current_concept_id=row["current_concept_id"] or "",
+            current_concept_name=row["current_concept_name"] or "",
+            concept_description=row["concept_description"] or "",
+            subject=row["subject"] or "",
+            mastery=float(row["mastery"] or 0.3),
+            waiting_for_answer=bool(row["waiting_for_answer"]),
+            last_response_type=row["last_response_type"] or "explain",
+            last_attempt_correct=last_correct,
+        )
 
     def load_session(self, session_id: str) -> list[dict]:
         """Load all messages for a session.
@@ -159,9 +256,10 @@ class SessionStore:
         ]
 
     def delete_session(self, session_id: str) -> None:
-        """Delete a session and all its messages."""
+        """Delete a session, its messages, and its tutor context."""
         conn = self.conn
         conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM tutor_contexts WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         conn.commit()
         logger.info(f"Deleted session: {session_id}")

@@ -10,6 +10,7 @@ import threading
 
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QApplication, QMainWindow
 
 from core.logging_setup import setup_logging
 from core.model_fetch.ollama_pull import OllamaPullError
@@ -34,6 +35,7 @@ class Bridge(QObject):
         import uuid
         super().__init__(parent)
         self._view: QWebEngineView | None = None
+        self._window: QMainWindow | None = None
         self._orchestrator = None
         self._generation_active = False
         self._session_id = str(uuid.uuid4())
@@ -60,14 +62,45 @@ class Bridge(QObject):
             conv = self._orchestrator.get_conversation(self._session_id)
             if conv and conv.get_all():
                 from core.session import get_session_store
+                from core.tutor_engine import get_tutor_engine
                 store = get_session_store()
-                store.save_session(self._session_id, conv)
+                tutor = get_tutor_engine()
+                tutor_ctx = tutor.session_contexts.get(self._session_id)
+                store.save_session(self._session_id, conv, tutor_context=tutor_ctx)
         except Exception as exc:
             logger.error(f"Failed to save session: {exc}")
             self.error.emit(f"Warning: Failed to save session: {exc}")
 
     def set_view(self, view: QWebEngineView):
         self._view = view
+
+    def set_window(self, window: QMainWindow):
+        self._window = window
+
+    # ── Window Controls (Frameless UI) ──────────────────────────────────
+
+    @Slot()
+    def minimize_window(self):
+        """Minimize the desktop window."""
+        if self._window:
+            self._window.showMinimized()
+
+    @Slot()
+    def maximize_window(self):
+        """Toggle maximize / restore the desktop window."""
+        if self._window:
+            if self._window.isMaximized():
+                self._window.showNormal()
+            else:
+                self._window.showMaximized()
+
+    @Slot()
+    def close_window(self):
+        """Close the desktop window."""
+        if self._window:
+            self._window.close()
+        else:
+            QApplication.quit()
 
     # ── Slots (callable from JavaScript) ────────────────────────────────
 
@@ -86,6 +119,7 @@ class Bridge(QObject):
                 if is_done:
                     self._save_current_session()
                     self.done.emit()
+                    return
                 elif token:
                     self.token.emit(0, token)
         except Exception as exc:
@@ -354,9 +388,10 @@ class Bridge(QObject):
 
             store = get_session_store()
             messages = store.load_session(session_id)
+            tutor_ctx = store.load_tutor_context(session_id)
 
             orch = self._get_orchestrator()
-            orch.load_session(session_id, messages)
+            orch.load_session(session_id, messages, tutor_context=tutor_ctx)
             self._session_id = session_id
 
             logger.info(f"Loaded session {session_id}: {len(messages)} messages")

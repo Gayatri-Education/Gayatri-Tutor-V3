@@ -29,6 +29,7 @@ class MainWindow(QMainWindow):
         self._channel.registerObject("bridge", self._bridge)
         self._web.page().setWebChannel(self._channel)
         self._bridge.set_view(self._web)
+        self._bridge.set_window(self)
 
         # Load UI
         ui_path = BASE_DIR / "app" / "ui" / "index.html"
