@@ -202,6 +202,17 @@ def _post_tutor_response(session_id: str, tutor: Any = None) -> None:
         tutor.set_waiting_for_answer(session_id)
 
 
+_TASK_TYPE_AGENTS: dict[str, str] = {
+    "tutor": "Tutor",
+    "practice": "Practice Generator",
+    "quiz": "Practice Generator",
+    "code": "Code Reviewer",
+    "review": "Code Reviewer",
+    "orchestrate": "Orchestrator Agent",
+    "plan": "Orchestrator Agent",
+}
+
+
 @dataclass
 class TurnOptions:
     """Options for a single turn."""
@@ -241,6 +252,9 @@ class Orchestrator:
         tutor_engine: Any = None,
         ldg: Any = None,
     ):
+        if registry is None:
+            from core.agents.default_agents import register_default_agents
+            register_default_agents()
         self.registry = registry or agent_registry
         self.runtime = runtime or AgentRuntime(registry=self.registry)
         self.conversations = conversations if conversations is not None else _conversations
@@ -263,6 +277,99 @@ class Orchestrator:
     def _get_conversation(self, session_id: str) -> Conversation:
         return self.conversations.get(session_id)
 
+    def _resolve_agent(self, user_message: str, opts: TurnOptions):
+        """Resolve agent dispatch taking task_type into account."""
+        if opts.task_type and opts.task_type.lower() != "auto":
+            task_key = opts.task_type.lower().strip()
+            # If task_type indicates a speed preference, map to forced_tier
+            if task_key in ("fast", "speed") and not opts.forced_tier:
+                opts.forced_tier = "fast"
+            elif task_key in ("reasoning", "slow") and not opts.forced_tier:
+                opts.forced_tier = "slow"
+            elif task_key in ("medium", "balanced") and not opts.forced_tier:
+                opts.forced_tier = "medium"
+
+            agent_name = _TASK_TYPE_AGENTS.get(task_key) or opts.task_type
+            spec = self.registry.get(agent_name)
+            if spec is not None:
+                logger.info(f"Task type forced agent dispatch: {spec.name} for task '{opts.task_type}'")
+                return spec, 1.0, f"task_type:{opts.task_type}"
+
+        dispatch = self.registry.dispatch(user_message)
+        if dispatch is not None:
+            spec, confidence = dispatch
+            return spec, confidence, f"agent_dispatch:{spec.name}:{confidence:.2f}"
+        return None
+
+    def _resolve_provider(self, opts: TurnOptions, exec_mode: ExecutionMode) -> tuple[Any, str, str]:
+        """Resolve LLM provider and model based on model_override, forced_tier, and privacy mode.
+
+        Returns: (provider_instance_or_class, model_id, routing_reason)
+        """
+        from core.providers.local import LocalProvider
+
+        if opts.model_override:
+            override = opts.model_override.strip()
+            if override.lower() == "local":
+                return LocalProvider, "local", "model_override:local"
+
+            # Enforce privacy mode: cloud overrides strictly prohibited in LOCAL_ONLY mode
+            if exec_mode == ExecutionMode.LOCAL_ONLY:
+                raise PermissionError(
+                    f"Data cannot leave the device: model_override '{override}' "
+                    "is blocked because privacy mode is set to 'local_only'."
+                )
+
+            from core.providers.registry import get_registry
+            registry = get_registry()
+            target_provider = None
+            target_model_id = override
+
+            if "/" in override:
+                pkey, mid = override.split("/", 1)
+                target_provider = registry.get(pkey)
+                target_model_id = mid
+            else:
+                target_provider = registry.get(override)
+                if target_provider is not None:
+                    models = target_provider.list_models()
+                    target_model_id = models[0].id if models else override
+                else:
+                    for p in registry._providers.values():
+                        for m in p.list_models():
+                            if m.id == override:
+                                target_provider = p
+                                target_model_id = m.id
+                                break
+                        if target_provider:
+                            break
+
+            if target_provider is None:
+                raise ValueError(f"Unknown or unconfigured provider/model override: '{override}'")
+
+            if not registry._check_provider_available(target_provider):
+                raise RuntimeError(
+                    f"Provider '{target_provider.name}' for model '{target_model_id}' is not ready or available."
+                )
+
+            return target_provider, target_model_id, f"model_override:{target_provider.key}/{target_model_id}"
+
+        if opts.forced_tier:
+            from core.providers.base import SpeedTier
+            from core.providers.registry import get_registry
+            try:
+                tier = SpeedTier(opts.forced_tier.lower())
+            except ValueError:
+                tier = SpeedTier.MEDIUM
+
+            chain = get_registry().get_fallback_chain(tier)
+            if chain:
+                prov, model_info = chain[0]
+                return prov, model_info.id, f"forced_tier:{tier.value}:{prov.key}/{model_info.id}"
+            return LocalProvider, "local", f"forced_tier_fallback_local:{opts.forced_tier}"
+
+        return LocalProvider, "local", "no_agent_match:local_fallback"
+
     def submit(self, user_message: str, session_id: str = "default",
                options: TurnOptions | None = None) -> TurnResult:
         """Process a user message and return the full response."""
@@ -276,16 +383,16 @@ class Orchestrator:
         conv = self._get_conversation(session_id)
 
         # 1. Try agent dispatch
-        dispatch = self.registry.dispatch(user_message)
+        dispatch = self._resolve_agent(user_message, opts)
 
         if dispatch is not None:
-            spec, confidence = dispatch
+            spec, confidence, agent_routing_reason = dispatch
             logger.info(f"Agent dispatch: {spec.name} (confidence: {confidence:.2f})")
 
             context = AgentContext(
                 session_id=session_id,
                 user_message=user_message,
-                model_tier="local",
+                model_tier=opts.forced_tier or "local",
                 history=conv.get_messages_for_model()[-10:],
             )
 
@@ -325,17 +432,17 @@ class Orchestrator:
                 return TurnResult(
                     text=response.text,
                     model_used=f"agent:{spec.name}",
-                    routing_reason=f"agent_dispatch:{spec.name}:{confidence:.2f}",
+                    routing_reason=agent_routing_reason,
                     latency_ms=latency,
                     agent_name=spec.name,
                     execution_mode=exec_mode.value,
                     status="SUCCESS",
                 )
 
-        # 2. No agent matched — query the local model directly
-        logger.info("No agent matched, using local model")
+        # 2. No agent matched — query resolved model
         try:
-            from core.providers.local import LocalProvider
+            provider, model_id, routing_reason = self._resolve_provider(opts, exec_mode)
+            logger.info(f"Routing turn to {model_id} via {routing_reason}")
 
             messages = [
                 {"role": "system", "content": "You are Gayatri AI, a helpful learning assistant."},
@@ -345,19 +452,31 @@ class Orchestrator:
                     messages.append({"role": msg.role, "content": msg.content})
             messages.append({"role": "user", "content": user_message})
 
-            text = LocalProvider.chat(
-                messages,
-                max_tokens=opts.max_tokens,
-                temperature=opts.temperature,
-            )
+            from core.providers.local import LocalProvider
+            if provider is LocalProvider:
+                text = LocalProvider.chat(
+                    messages,
+                    max_tokens=opts.max_tokens,
+                    temperature=opts.temperature,
+                )
+            else:
+                from core.providers.base import ChatMessage, ChatOptions
+                chat_msgs = [ChatMessage(role=m["role"], content=m["content"]) for m in messages]
+                chat_opts = ChatOptions(
+                    max_tokens=opts.max_tokens,
+                    temperature=opts.temperature,
+                )
+                resp = provider.chat(chat_msgs, options=chat_opts)
+                text = resp.text
+
             conv.add("user", user_message)
             conv.add("assistant", text)
 
             latency = (time.time() - start) * 1000
             return TurnResult(
                 text=text,
-                model_used="local",
-                routing_reason="no_agent_match:local_fallback",
+                model_used=model_id,
+                routing_reason=routing_reason,
                 latency_ms=latency,
                 execution_mode=exec_mode.value,
             )
@@ -378,22 +497,23 @@ class Orchestrator:
                options: TurnOptions | None = None):
         """Process a user message and stream tokens back. Yields (token, is_done)."""
         opts = options or TurnOptions()
+        exec_mode = _get_execution_mode()
         
         # Redact PII upfront so all agents and conversation history are safe
         user_message = _redact_pii(user_message)
         
         conv = self._get_conversation(session_id)
 
-        dispatch = self.registry.dispatch(user_message)
+        dispatch = self._resolve_agent(user_message, opts)
 
         if dispatch is not None:
-            spec, confidence = dispatch
+            spec, confidence, agent_routing_reason = dispatch
             logger.info(f"Agent dispatch (stream): {spec.name} ({confidence:.2f})")
 
             context = AgentContext(
                 session_id=session_id,
                 user_message=user_message,
-                model_tier="local",
+                model_tier=opts.forced_tier or "local",
                 history=conv.get_messages_for_model()[-10:],
             )
 
@@ -423,10 +543,11 @@ class Orchestrator:
                 yield response.text, True
                 return
 
-        # No agent — stream from local model
+        # No agent — stream from resolved model
         buffer = []
         try:
-            from core.providers.local import LocalProvider
+            provider, model_id, routing_reason = self._resolve_provider(opts, exec_mode)
+            logger.info(f"Routing stream turn to {model_id} via {routing_reason}")
 
             messages = [
                 {"role": "system", "content": "You are Gayatri AI, a helpful learning assistant."},
@@ -436,11 +557,23 @@ class Orchestrator:
                     messages.append({"role": msg.role, "content": msg.content})
             messages.append({"role": "user", "content": user_message})
 
-            for token in LocalProvider.chat_stream(
-                messages,
-                max_tokens=opts.max_tokens,
-                temperature=opts.temperature,
-            ):
+            from core.providers.local import LocalProvider
+            if provider is LocalProvider:
+                token_stream = LocalProvider.chat_stream(
+                    messages,
+                    max_tokens=opts.max_tokens,
+                    temperature=opts.temperature,
+                )
+            else:
+                from core.providers.base import ChatMessage, ChatOptions
+                chat_msgs = [ChatMessage(role=m["role"], content=m["content"]) for m in messages]
+                chat_opts = ChatOptions(
+                    max_tokens=opts.max_tokens,
+                    temperature=opts.temperature,
+                )
+                token_stream = provider.stream(chat_msgs, options=chat_opts)
+
+            for token in token_stream:
                 buffer.append(token)
                 yield token, False
         except Exception as exc:

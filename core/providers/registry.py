@@ -57,14 +57,14 @@ class ProviderRegistry:
         return result
 
     def _check_provider_available(self, provider: LLMProvider) -> bool:
-        """Quick check if a provider is reachable."""
+        """Quick check if a provider is ready and reachable."""
         try:
             if provider.key == "local":
                 from core.providers.local import LocalProvider
                 return LocalProvider.is_available()
-            # Cloud providers: check if they have any models
-            models = provider.list_models()
-            return len(models) > 0
+            if hasattr(provider, "is_ready"):
+                return provider.is_ready()
+            return provider.is_authenticated and provider.is_reachable
         except Exception:
             return False
 
@@ -127,6 +127,10 @@ class ProviderRegistry:
                 # Enforce LOCAL_ONLY: skip cloud providers
                 if (exec_mode is None or exec_mode == ExecutionMode.LOCAL_ONLY) and provider.key != "local":
                     logger.debug(f"Skipping cloud provider '{provider.key}' — privacy mode is local_only")
+                    continue
+                # Ensure provider is actually ready before adding to fallback chain (Audit #26)
+                if not self._check_provider_available(provider):
+                    logger.debug(f"Skipping provider '{provider.key}' — not ready/available")
                     continue
                 try:
                     models = provider.list_models()
