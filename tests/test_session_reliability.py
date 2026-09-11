@@ -292,3 +292,41 @@ class TestOrchestratorAndBridgeSessionSync:
         del_res = json.loads(bridge.delete_session("valid_sess"))
         assert del_res["ok"] is True
         assert len(store.load_session("valid_sess")) == 0
+
+    def test_bridge_send_message_emits_agent_token_and_done(self, monkeypatch):
+        """Verify token is emitted even when is_done is True alongside token (agent turn)."""
+        from app.bridge import Bridge
+        import unittest.mock as mock
+
+        bridge = Bridge()
+        mock_orch = mock.MagicMock()
+        # Simulate agent yielding token and is_done=True together
+        mock_orch.stream.return_value = iter([("Agent full answer", True)])
+        bridge._orchestrator = mock_orch
+
+        tokens = []
+        dones = []
+        bridge.token.connect(lambda idx, tok: tokens.append(tok))
+        bridge.done.connect(lambda: dones.append(True))
+
+        bridge.send_message("What is Python?")
+
+        assert len(tokens) == 1
+        assert tokens[0] == "Agent full answer"
+        assert len(dones) == 1
+
+    def test_tutor_engine_clear_session_resets_in_memory_context(self):
+        """Verify TutorEngine.clear_session resets in-memory context."""
+        from core.tutor_engine import TutorEngine, TutorContext
+        from core.knowledge_graph import LearningDependencyGraph
+
+        ldg = LearningDependencyGraph()
+        tutor = TutorEngine(ldg)
+
+        ctx = tutor.get_or_create_context("sess_tutor_clear")
+        ctx.current_concept_id = "loops_1"
+        assert tutor.session_contexts["sess_tutor_clear"].current_concept_id == "loops_1"
+
+        tutor.clear_session("sess_tutor_clear")
+        assert "sess_tutor_clear" not in tutor.session_contexts
+

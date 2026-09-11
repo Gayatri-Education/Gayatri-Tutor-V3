@@ -130,12 +130,18 @@ class Bridge(QObject):
                     )
                     break
 
+                if token:
+                    self.token.emit(0, token)
+
                 if is_done:
                     self._save_session_by_id(generation_session_id)
                     self.done.emit()
                     return
-                elif token:
-                    self.token.emit(0, token)
+
+            # If generator exhausted without yielding is_done=True
+            if self._session_id == generation_session_id:
+                self._save_session_by_id(generation_session_id)
+                self.done.emit()
         except Exception as exc:
             from core.errors import sanitize_error
             sanitized = sanitize_error(exc, category="bridge_send_message")
@@ -469,6 +475,9 @@ class Bridge(QObject):
 
             if self._orchestrator:
                 self._orchestrator.conversations.delete(session_id)
+                tutor = self._orchestrator.get_tutor_engine()
+                if tutor and hasattr(tutor, "clear_session"):
+                    tutor.clear_session(session_id)
 
             # If deleting the currently active session, initialize a fresh one
             if self._session_id == session_id:

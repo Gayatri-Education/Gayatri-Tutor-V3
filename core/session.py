@@ -438,3 +438,10 @@ def get_session_store() -> SessionStore:
     if _session_store is None:
         _session_store = SessionStore()
     return _session_store
+
+
+__all__ = [
+    "SessionStore",
+    "get_session_store",
+    "validate_session_id",
+]
