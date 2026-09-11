@@ -8,6 +8,7 @@ No patented learning methods implemented.
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,121 +52,151 @@ class TutorEngine:
     """Orchestrates concept selection, progression, and mastery tracking.
 
     Wraps the Learning Dependency Graph with teaching logic.
+    Thread-safe across multiple concurrent sessions.
     """
 
     def __init__(self, ldg: Any):
         self.ldg = ldg
         self.session_contexts: dict[str, TutorContext] = {}
+        self._lock = threading.RLock()
 
     def get_or_create_context(self, session_id: str) -> TutorContext:
         """Get or create teaching context for a session, restoring from DB if available."""
-        if session_id not in self.session_contexts:
-            try:
-                from core.session import get_session_store
-                stored = get_session_store().load_tutor_context(session_id)
-                if stored is not None:
-                    self.session_contexts[session_id] = stored
-                    return stored
-            except Exception as exc:
-                logger.debug(f"Could not load persisted tutor context: {exc}")
-            self.session_contexts[session_id] = TutorContext()
-        return self.session_contexts[session_id]
+        with self._lock:
+            if session_id not in self.session_contexts:
+                try:
+                    from core.session import get_session_store
+                    stored = get_session_store().load_tutor_context(session_id)
+                    if stored is not None:
+                        self.session_contexts[session_id] = stored
+                        return stored
+                except Exception as exc:
+                    logger.debug(f"Could not load persisted tutor context: {exc}")
+                self.session_contexts[session_id] = TutorContext()
+            return self.session_contexts[session_id]
 
     def save_context(self, session_id: str) -> None:
         """Persist tutor teaching context to database."""
-        ctx = self.session_contexts.get(session_id)
-        if ctx:
-            try:
-                from core.session import get_session_store
-                get_session_store().save_tutor_context(session_id, ctx)
-            except Exception as exc:
-                logger.debug(f"Failed to persist tutor context for session {session_id}: {exc}")
+        with self._lock:
+            ctx = self.session_contexts.get(session_id)
+            if ctx:
+                try:
+                    from core.session import get_session_store
+                    get_session_store().save_tutor_context(session_id, ctx)
+                except Exception as exc:
+                    logger.debug(f"Failed to persist tutor context for session {session_id}: {exc}")
+
+    def set_context(self, session_id: str, context: TutorContext) -> None:
+        """Set teaching context for a session and persist it."""
+        with self._lock:
+            self.session_contexts[session_id] = context
+            self.save_context(session_id)
 
     def get_next_concept_for_session(self, session_id: str) -> Any:
         """Get the next concept to teach, advancing from current if mastered."""
-        ctx = self.get_or_create_context(session_id)
-        current_id = ctx.current_concept_id
+        with self._lock:
+            ctx = self.get_or_create_context(session_id)
+            current_id = ctx.current_concept_id
 
-        from core.config import LDG_MASTERY_THRESHOLD
-        # If no current concept, or current is mastered, get next
-        if not current_id or self.ldg.get_mastery(current_id) >= LDG_MASTERY_THRESHOLD:
-            next_concept = self.ldg.get_next_concept(ctx.subject)
-            if next_concept:
-                # Advance context
-                ctx.current_concept_id = next_concept.id
-                ctx.current_concept_name = next_concept.name
-                ctx.concept_description = next_concept.description
-                ctx.mastery = self.ldg.get_mastery(next_concept.id)
-                ctx.waiting_for_answer = False
-                ctx.last_response_type = "explain"
-                self.save_context(session_id)
-                logger.info(f"Advanced to concept: {next_concept.name}")
+            from core.config import LDG_MASTERY_THRESHOLD
+            # If no current concept, or current is mastered, get next
+            if not current_id or self.ldg.get_mastery(current_id) >= LDG_MASTERY_THRESHOLD:
+                next_concept = self.ldg.get_next_concept(ctx.subject)
+                if next_concept:
+                    # Advance context
+                    ctx.current_concept_id = next_concept.id
+                    ctx.current_concept_name = next_concept.name
+                    ctx.concept_description = next_concept.description
+                    ctx.mastery = self.ldg.get_mastery(next_concept.id)
+                    ctx.waiting_for_answer = False
+                    ctx.last_response_type = "explain"
+                    self.save_context(session_id)
+                    logger.info(f"Advanced to concept: {next_concept.name}")
 
-        return self.ldg.get_concept(ctx.current_concept_id) if ctx.current_concept_id else None
+            return self.ldg.get_concept(ctx.current_concept_id) if ctx.current_concept_id else None
 
     def record_student_response(self, session_id: str, correct: bool | None,
                                 confidence: float = 1.0) -> float:
         """Record a student's answer and update mastery."""
-        ctx = self.get_or_create_context(session_id)
-        if not ctx.current_concept_id:
-            return 0.0
+        with self._lock:
+            ctx = self.get_or_create_context(session_id)
+            if not ctx.current_concept_id:
+                return 0.0
 
-        if correct is not None:
-            new_mastery = self.ldg.record_attempt(ctx.current_concept_id, correct, confidence)
-            ctx.mastery = new_mastery
-            status = "correct" if correct else "incorrect"
-            logger.info(
-                f"Student {status} on {ctx.current_concept_name}: "
-                f"mastery={new_mastery:.3f}"
-            )
-        else:
-            new_mastery = ctx.mastery
-            logger.info(
-                f"Student response uncertain on {ctx.current_concept_name}: "
-                f"mastery remains {new_mastery:.3f}"
-            )
+            if correct is not None:
+                new_mastery = self.ldg.record_attempt(ctx.current_concept_id, correct, confidence)
+                ctx.mastery = new_mastery
+                status = "correct" if correct else "incorrect"
+                logger.info(
+                    f"Student {status} on {ctx.current_concept_name}: "
+                    f"mastery={new_mastery:.3f}"
+                )
+            else:
+                new_mastery = ctx.mastery
+                logger.info(
+                    f"Student response uncertain on {ctx.current_concept_name}: "
+                    f"mastery remains {new_mastery:.3f}"
+                )
 
-        ctx.last_response_type = "feedback" if ctx.waiting_for_answer else "explain"
-        ctx.last_attempt_correct = correct
-        ctx.waiting_for_answer = False
-        self.save_context(session_id)
+            ctx.last_response_type = "feedback" if ctx.waiting_for_answer else "explain"
+            ctx.last_attempt_correct = correct
+            ctx.waiting_for_answer = False
+            self.save_context(session_id)
 
-        return new_mastery
+            return new_mastery
 
     def set_waiting_for_answer(self, session_id: str) -> None:
         """Mark that the tutor just asked a question and is waiting."""
-        ctx = self.get_or_create_context(session_id)
-        ctx.waiting_for_answer = True
-        ctx.last_response_type = "question"
-        self.save_context(session_id)
+        with self._lock:
+            ctx = self.get_or_create_context(session_id)
+            ctx.waiting_for_answer = True
+            ctx.last_response_type = "question"
+            self.save_context(session_id)
 
     def is_waiting_for_answer(self, session_id: str) -> bool:
         """Check if the tutor is waiting for a student answer."""
-        ctx = self.get_or_create_context(session_id)
-        return ctx.waiting_for_answer
+        with self._lock:
+            ctx = self.get_or_create_context(session_id)
+            return ctx.waiting_for_answer
 
     def get_session_summary(self, session_id: str) -> dict:
         """Get a summary of the current teaching session."""
-        ctx = self.get_or_create_context(session_id)
-        stats = self.ldg.get_progress_stats(ctx.subject)
-        return {
-            "current_concept": ctx.current_concept_name,
-            "mastery": f"{int(ctx.mastery * 100)}%",
-            "waiting_for_answer": ctx.waiting_for_answer,
-            "progress": stats,
-        }
+        with self._lock:
+            ctx = self.get_or_create_context(session_id)
+            stats = self.ldg.get_progress_stats(ctx.subject)
+            return {
+                "current_concept": ctx.current_concept_name,
+                "mastery": f"{int(ctx.mastery * 100)}%",
+                "waiting_for_answer": ctx.waiting_for_answer,
+                "progress": stats,
+            }
+
+    def clear_session(self, session_id: str) -> None:
+        """Clear tutor context for a specific session."""
+        with self._lock:
+            self.session_contexts.pop(session_id, None)
 
 
-# Global tutor engine (lazy-initialized with LDG)
+# Global tutor engine (lazy-initialized with LDG, protected by lock)
+_tutor_lock = threading.Lock()
 _tutor_engine: TutorEngine | None = None
 
 
 def get_tutor_engine(ldg: Any = None) -> TutorEngine:
-    """Get the global tutor engine."""
+    """Get the global tutor engine in a thread-safe manner."""
     global _tutor_engine
     if _tutor_engine is None:
-        if ldg is None:
-            from core.knowledge_graph import LearningDependencyGraph
-            ldg = LearningDependencyGraph()
-        _tutor_engine = TutorEngine(ldg)
+        with _tutor_lock:
+            if _tutor_engine is None:
+                if ldg is None:
+                    from core.knowledge_graph import LearningDependencyGraph
+                    ldg = LearningDependencyGraph()
+                _tutor_engine = TutorEngine(ldg)
     return _tutor_engine
+
+
+def reset_tutor_engine() -> None:
+    """Reset the global tutor engine (primarily for test isolation)."""
+    global _tutor_engine
+    with _tutor_lock:
+        _tutor_engine = None

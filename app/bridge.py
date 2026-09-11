@@ -55,21 +55,25 @@ class Bridge(QObject):
             )
         return self._orchestrator
 
-    def _save_current_session(self):
+    def _save_session_by_id(self, session_id: str):
         try:
             if not self._orchestrator:
                 return
-            conv = self._orchestrator.get_conversation(self._session_id)
+            conv = self._orchestrator.get_conversation(session_id)
             if conv and conv.get_all():
                 from core.session import get_session_store
                 from core.tutor_engine import get_tutor_engine
                 store = get_session_store()
-                tutor = get_tutor_engine()
-                tutor_ctx = tutor.session_contexts.get(self._session_id)
-                store.save_session(self._session_id, conv, tutor_context=tutor_ctx)
+                tutor = self._orchestrator.get_tutor_engine() if hasattr(self._orchestrator, "get_tutor_engine") else get_tutor_engine()
+                tutor_ctx = tutor.session_contexts.get(session_id) if tutor else None
+                store.save_session(session_id, conv, tutor_context=tutor_ctx)
         except Exception as exc:
-            logger.error(f"Failed to save session: {exc}")
-            self.error.emit(f"Warning: Failed to save session: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_save_session")
+            self.error.emit(f"Warning: Failed to save session: {sanitized.user_message}")
+
+    def _save_current_session(self):
+        self._save_session_by_id(self._session_id)
 
     def set_view(self, view: QWebEngineView):
         self._view = view
@@ -113,25 +117,39 @@ class Bridge(QObject):
 
         orch = self._get_orchestrator()
         self._generation_active = True
+        generation_session_id = self._session_id
 
         try:
-            for token, is_done in orch.stream(message, session_id=self._session_id):
+            for token, is_done in orch.stream(message, session_id=generation_session_id):
+                # Verify session hasn't switched during generation (Audit #134)
+                if self._session_id != generation_session_id:
+                    logger.warning(
+                        f"Active session changed from {generation_session_id} to {self._session_id} "
+                        "during streaming; discarding output for superseded session."
+                    )
+                    break
+
                 if is_done:
-                    self._save_current_session()
+                    self._save_session_by_id(generation_session_id)
                     self.done.emit()
                     return
                 elif token:
                     self.token.emit(0, token)
         except Exception as exc:
-            logger.error(f"send_message error: {exc}")
-            self.error.emit(str(exc))
-            self.done.emit()
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_send_message")
+            if self._session_id == generation_session_id:
+                self.error.emit(sanitized.user_message)
+                self.done.emit()
         finally:
             self._generation_active = False
 
     @Slot()
     def new_chat(self):
         """Start a new conversation."""
+        if self._generation_active:
+            self.error.emit("Cannot start a new chat while a response is generating.")
+            return
         import uuid
         self._save_current_session()
         self._session_id = str(uuid.uuid4())
@@ -159,11 +177,12 @@ class Bridge(QObject):
                 })
             return json.dumps({"ok": True, "sessions": result})
         except Exception as exc:
-            logger.error(f"Error in get_sessions: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_get_sessions")
             return json.dumps({
                 "ok": False,
                 "sessions": [],
-                "error": str(exc),
+                "error": sanitized.user_message,
                 "recoverable": True
             })
 
@@ -171,17 +190,39 @@ class Bridge(QObject):
     def set_setting(self, key: str, value: str):
         """Persist a setting (value is JSON-stringified from JS)."""
         try:
-            from core.settings import get_settings
+            from core.settings import _SETTINGS_SCHEMA, get_settings
             store = get_settings()
             # Try to parse as JSON for non-string types
             try:
                 parsed = json.loads(value)
             except (json.JSONDecodeError, ValueError):
                 parsed = value
+
+            # Defensively coerce string representation if schema expects primitive type
+            if isinstance(parsed, str) and key in _SETTINGS_SCHEMA:
+                expected_type = _SETTINGS_SCHEMA[key]
+                if expected_type is bool:
+                    if parsed.lower() in ("true", "1", "yes"):
+                        parsed = True
+                    elif parsed.lower() in ("false", "0", "no"):
+                        parsed = False
+                elif expected_type is int:
+                    try:
+                        parsed = int(parsed)
+                    except ValueError:
+                        pass
+                elif expected_type is float:
+                    try:
+                        parsed = float(parsed)
+                    except ValueError:
+                        pass
+
             store.set(key, parsed)
             logger.debug(f"Setting: {key} = {parsed!r}")
         except Exception as exc:
-            logger.error(f"set_setting failed: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_set_setting")
+            self.error.emit(f"Failed to update setting '{key}': {sanitized.user_message}")
 
     @Slot(str, result=str)
     def get_setting(self, key: str) -> str:
@@ -215,8 +256,9 @@ class Bridge(QObject):
 
             return json.dumps(status)
         except Exception as exc:
-            logger.error(f"get_local_model_status error: {exc}")
-            return json.dumps({"installed": False, "error": str(exc), "reason_code": "unknown_error"})
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_get_local_model_status")
+            return json.dumps({"installed": False, "error": sanitized.user_message, "reason_code": "unknown_error"})
 
     @Slot(result=str)
     def get_providers(self) -> str:
@@ -263,8 +305,9 @@ class Bridge(QObject):
 
             return json.dumps({"valid": valid, "message": msg})
         except Exception as exc:
-            logger.error(f"validate_provider_key error: {exc}")
-            return json.dumps({"valid": False, "message": str(exc)[:200]})
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_validate_provider_key")
+            return json.dumps({"valid": False, "message": sanitized.user_message})
 
     @Slot(str, str)
     def save_provider_key(self, provider_key: str, api_key: str):
@@ -275,8 +318,9 @@ class Bridge(QObject):
             vault.store_key(provider_key, api_key)
             logger.info(f"Provider key saved: {provider_key}")
         except Exception as exc:
-            logger.error(f"save_provider_key error: {exc}")
-            self.error.emit(f"Failed to save key: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_save_provider_key")
+            self.error.emit(f"Failed to save key: {sanitized.user_message}")
 
     @Slot(result=str)
     def get_model_catalog(self) -> str:
@@ -328,13 +372,10 @@ class Bridge(QObject):
                 self.token.emit(0, f"Digest: {result['digest'][:16]}...")
                 self.done.emit()
 
-            except OllamaPullError as exc:
-                logger.error(f"Model download failed: {exc}")
-                self.error.emit(json.dumps({"status": "error", "message": str(exc)[:300]}))
-                self.done.emit()
             except Exception as exc:
-                logger.error(f"Model download unexpected error: {exc}")
-                self.error.emit(json.dumps({"status": "error", "message": str(exc)[:300]}))
+                from core.errors import sanitize_error
+                sanitized = sanitize_error(exc, category="bridge_model_download")
+                self.error.emit(json.dumps({"status": "error", "message": sanitized.user_message}))
                 self.done.emit()
             finally:
                 self._download_active = False
@@ -376,12 +417,16 @@ class Bridge(QObject):
             })
 
         except Exception as exc:
-            logger.error(f"install_model error: {exc}")
-            return json.dumps({"status": "error", "message": str(exc)[:200]})
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_install_model")
+            return json.dumps({"status": "error", "message": sanitized.user_message})
 
     @Slot(str)
     def load_session_id(self, session_id: str):
         """Load a previous session into the active conversation."""
+        if self._generation_active:
+            self.error.emit("Cannot switch session while a response is generating.")
+            return
         try:
             self._save_current_session()
             from core.session import get_session_store
@@ -396,5 +441,6 @@ class Bridge(QObject):
 
             logger.info(f"Loaded session {session_id}: {len(messages)} messages")
         except Exception as exc:
-            logger.error(f"load_session_id error: {exc}")
-            self.error.emit(str(exc))
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_load_session")
+            self.error.emit(f"Failed to load session: {sanitized.user_message}")

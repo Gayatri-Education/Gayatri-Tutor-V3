@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.agents.registry import AgentResponse, AgentSpec, agent_registry
+from core.agents.registry import AgentResponse, AgentSpec, ModelUnavailableError, agent_registry
 
 logger = logging.getLogger("gayatri.agents.runtime")
 
@@ -22,33 +22,70 @@ class AgentContext:
     metadata: dict = field(default_factory=dict)
 
 
+@dataclass
+class ToolSpec:
+    """Specification of a tool registered with ToolRegistry."""
+    name: str
+    func: Callable
+    description: str = ""
+    argument_schema: dict[str, type] | None = None
+    timeout_s: float = 30.0
+
+
 class ToolRegistry:
     """Registry of available tools that agents can call."""
 
     def __init__(self):
-        self._tools: dict[str, Callable] = {}
+        self._tools: dict[str, ToolSpec] = {}
 
-    def register(self, name: str):
-        """Decorator to register a tool function."""
+    def register(
+        self,
+        name: str,
+        description: str = "",
+        argument_schema: dict[str, type] | None = None,
+        timeout_s: float = 30.0,
+        allow_replace: bool = False,
+    ) -> Callable:
+        """Decorator to register a tool function. Rejects duplicate registrations unless allow_replace=True."""
         def decorator(func: Callable) -> Callable:
-            self._tools[name] = func
+            if name in self._tools and not allow_replace:
+                raise ValueError(
+                    f"Tool '{name}' is already registered. Set allow_replace=True to explicitly overwrite."
+                )
+            self._tools[name] = ToolSpec(
+                name=name,
+                func=func,
+                description=description,
+                argument_schema=argument_schema,
+                timeout_s=timeout_s,
+            )
             logger.info(f"Registered tool: {name}")
             return func
         return decorator
 
-    def get(self, name: str) -> Callable | None:
+    def get(self, name: str) -> ToolSpec | None:
         return self._tools.get(name)
 
     def list_tools(self) -> list[str]:
         return list(self._tools.keys())
 
     def call(self, name: str, **kwargs) -> Any:
-        """Execute a tool by name with given arguments."""
-        func = self._tools.get(name)
-        if func is None:
+        """Execute a tool by name with validated arguments."""
+        spec = self._tools.get(name)
+        if spec is None:
             raise ValueError(f"Tool '{name}' not found. Available: {self.list_tools()}")
+
+        # Validate arguments against schema if defined
+        if spec.argument_schema:
+            for arg_name, expected_type in spec.argument_schema.items():
+                if arg_name in kwargs and not isinstance(kwargs[arg_name], expected_type):
+                    raise TypeError(
+                        f"Argument '{arg_name}' for tool '{name}' must be of type {expected_type.__name__}, "
+                        f"got {type(kwargs[arg_name]).__name__}"
+                    )
+
         logger.info(f"Tool call: {name}({kwargs})")
-        return func(**kwargs)
+        return spec.func(**kwargs)
 
 
 # Global tool registry
@@ -61,7 +98,6 @@ class AgentRuntime:
     def __init__(self, registry=None, tools=None):
         self.registry = registry or agent_registry
         self.tools = tools or tool_registry
-        self._step_count = 0
         self._max_steps = 12
 
     def process(self, user_message: str, context: AgentContext, spec: AgentSpec | None = None) -> AgentResponse:
@@ -81,34 +117,77 @@ class AgentRuntime:
                 )
             spec, confidence = dispatch
 
-        # 2. Instantiate and run the agent
-        agent = self.registry.instantiate(spec.name)
+        try:
+            # 2. Instantiate and run the agent
+            agent = self.registry.instantiate(spec.name)
 
-        # 3. Process through agent loop (handle tool calls)
-        response = self._agent_loop(agent, spec, context)
-
-        return response
+            # 3. Process through agent loop (handle tool calls)
+            response = self._agent_loop(agent, spec, context)
+            return response
+        except ModelUnavailableError as exc:
+            logger.warning(f"Agent '{spec.name}' failed: local model is unavailable ({exc})")
+            return AgentResponse(
+                text=(
+                    "The local AI model is not installed or unavailable. "
+                    "Please download the model file to enable this agent."
+                ),
+                agent_name=spec.name,
+                status="MODEL_UNAVAILABLE",
+                metadata={"error": str(exc), "model_unavailable": True},
+            )
+        except Exception as exc:
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category=f"agent_{spec.name}")
+            return AgentResponse(
+                text=f"Agent '{spec.name}' encountered an error: {sanitized.user_message} (Reference: {sanitized.diagnostic_id})",
+                agent_name=spec.name,
+                status="ERROR",
+                metadata={"error": sanitized.user_message, "diagnostic_id": sanitized.diagnostic_id},
+            )
 
     def _agent_loop(self, agent, spec: AgentSpec, context: AgentContext) -> AgentResponse:
-        """Run the agent, handling tool calls in a loop."""
+        """Run the agent, handling tool calls in a loop with safety boundaries."""
+        import time
+        from core.config import AGENT_TIMEOUT_S
+
+        start_time = time.time()
         step_count = 0
 
         response = agent.process(context)
 
         # Handle tool calls if the agent produced them
         while response.tool_calls and step_count < self._max_steps:
+            # Enforce total agent turn execution timeout
+            if time.time() - start_time > AGENT_TIMEOUT_S:
+                logger.warning(f"Agent '{spec.name}' tool loop exceeded timeout of {AGENT_TIMEOUT_S}s")
+                break
+
             step_count += 1
             tool_results = []
 
             for tc in response.tool_calls:
-                tool_name = tc.get("tool")
+                tool_name = tc.get("tool", "")
                 tool_args = tc.get("args", {})
+
+                # Check if tool exists
+                if tool_name not in self.tools.list_tools():
+                    logger.warning(f"Agent requested unknown tool '{tool_name}'")
+                    tool_results.append({
+                        "tool": tool_name,
+                        "error": f"Tool '{tool_name}' is not recognized or available.",
+                    })
+                    continue
+
                 try:
                     result = self.tools.call(tool_name, **tool_args)
                     tool_results.append({"tool": tool_name, "result": str(result)})
                 except Exception as exc:
-                    tool_results.append({"tool": tool_name, "error": str(exc)})
+                    # Sanitize error to prevent leaking internal stack trace or paths into model context
                     logger.error(f"Tool {tool_name} failed: {exc}")
+                    tool_results.append({
+                        "tool": tool_name,
+                        "error": f"Tool execution failed: {type(exc).__name__}. Please verify arguments.",
+                    })
 
             # Feed tool results back to the agent
             context.metadata["tool_results"] = tool_results
