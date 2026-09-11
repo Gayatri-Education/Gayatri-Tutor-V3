@@ -479,7 +479,9 @@ class Orchestrator:
             tutor = self.get_tutor_engine()
             if tutor:
                 if tutor_context is not None:
-                    with tutor._lock:
+                    if hasattr(tutor, "set_context"):
+                        tutor.set_context(session_id, tutor_context)
+                    else:
                         tutor.session_contexts[session_id] = tutor_context
                 else:
                     tutor.get_or_create_context(session_id)

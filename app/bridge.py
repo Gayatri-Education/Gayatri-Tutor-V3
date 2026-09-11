@@ -190,13 +190,33 @@ class Bridge(QObject):
     def set_setting(self, key: str, value: str):
         """Persist a setting (value is JSON-stringified from JS)."""
         try:
-            from core.settings import get_settings
+            from core.settings import _SETTINGS_SCHEMA, get_settings
             store = get_settings()
             # Try to parse as JSON for non-string types
             try:
                 parsed = json.loads(value)
             except (json.JSONDecodeError, ValueError):
                 parsed = value
+
+            # Defensively coerce string representation if schema expects primitive type
+            if isinstance(parsed, str) and key in _SETTINGS_SCHEMA:
+                expected_type = _SETTINGS_SCHEMA[key]
+                if expected_type is bool:
+                    if parsed.lower() in ("true", "1", "yes"):
+                        parsed = True
+                    elif parsed.lower() in ("false", "0", "no"):
+                        parsed = False
+                elif expected_type is int:
+                    try:
+                        parsed = int(parsed)
+                    except ValueError:
+                        pass
+                elif expected_type is float:
+                    try:
+                        parsed = float(parsed)
+                    except ValueError:
+                        pass
+
             store.set(key, parsed)
             logger.debug(f"Setting: {key} = {parsed!r}")
         except Exception as exc:

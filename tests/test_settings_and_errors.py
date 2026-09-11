@@ -304,3 +304,121 @@ class TestOrchestratorAndBridgeErrorIntegration:
         err_msg = received_errors[0]
         assert "sk-abcdef" not in err_msg
         assert "https://" not in err_msg
+
+
+class TestPostAuditRegressionFixes:
+    """Test edge cases and safety boundaries identified during post-audit cohesion review."""
+
+    def test_exact_tie_at_1_0_falls_back_to_ambiguity(self):
+        """When two agents both have 1.0 confidence, dispatch must recognize ambiguity."""
+        from core.agents.registry import AgentRegistry
+
+        reg = AgentRegistry()
+        reg.register(name="AgentA", commands=["dupcmd"])(object)
+        reg.register(name="AgentB", commands=["dupcmd"])(object)
+
+        result = reg.dispatch("/dupcmd")
+        # With conflicting exact 1.0 matches, must not pick arbitrarily; fallback to None
+        assert result is None
+
+    def test_agent_runtime_error_sanitization(self):
+        """AgentRuntime sanitizes unexpected agent failure messages without leaking paths."""
+        from core.agents.registry import AgentRegistry
+        from core.agents.runtime import AgentContext, AgentRuntime
+
+        reg = AgentRegistry()
+
+        @reg.register(name="CrashingAgent", commands=["crash"])
+        class CrashingAgentImpl:
+            def process(self, context):
+                raise RuntimeError(r"Corrupted file at C:\Users\user\AppData\secret.db")
+
+        runtime = AgentRuntime(registry=reg)
+        ctx = AgentContext(session_id="s1", user_message="/crash")
+        res = runtime.process("/crash", ctx)
+
+        assert res.status == "ERROR"
+        assert r"C:\Users" not in res.text
+        assert "secret.db" not in res.text
+        assert "Reference: ERR-" in res.text
+
+    def test_tutor_engine_set_context(self, tmp_path):
+        """TutorEngine.set_context updates in-memory state and persists to store."""
+        from core.knowledge_graph import LearningDependencyGraph
+        from core.session import SessionStore
+        from core.tutor_engine import TutorContext, TutorEngine
+
+        ldg = LearningDependencyGraph(db_path=tmp_path / "ldg.db")
+        ldg.add_concept("concept_math", "Math Basics")
+        engine = TutorEngine(ldg)
+
+        ctx = TutorContext(
+            current_concept_id="concept_math",
+            current_concept_name="Math Basics",
+            mastery=0.75,
+            waiting_for_answer=True,
+        )
+        engine.set_context("sess_test_ctx", ctx)
+
+        assert engine.session_contexts["sess_test_ctx"].mastery == 0.75
+        assert engine.is_waiting_for_answer("sess_test_ctx") is True
+
+    def test_session_store_thread_safety(self, tmp_path):
+        """SessionStore supports concurrent multi-threaded writes without database locks."""
+        import threading
+        from core.conversation import Conversation
+        from core.session import SessionStore
+        from core.tutor_engine import TutorContext
+
+        store = SessionStore(db_path=tmp_path / "sessions.db")
+        errors = []
+
+        def worker(idx: int):
+            try:
+                for i in range(15):
+                    sess_id = f"sess_{idx}_{i}"
+                    conv = Conversation(session_id=sess_id)
+                    conv.add("user", f"Message {i} from thread {idx}")
+                    conv.add("assistant", f"Reply {i} from thread {idx}")
+                    ctx = TutorContext(current_concept_id="c1", mastery=0.5)
+                    store.save_session(sess_id, conv, tutor_context=ctx)
+                    loaded_msgs = store.load_session(sess_id)
+                    assert len(loaded_msgs) == 2
+                    loaded_ctx = store.load_tutor_context(sess_id)
+                    assert loaded_ctx is not None
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(t,)) for t in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Concurrent session store errors: {errors}"
+        store.close()
+
+    def test_bridge_set_setting_type_coercion(self, tmp_path):
+        """Bridge.set_setting defensively coerces stringified booleans and integers."""
+        from app.bridge import Bridge
+        from core.settings import SettingsStore
+
+        settings_path = tmp_path / "settings.json"
+        store = SettingsStore(settings_path=settings_path)
+
+        import unittest.mock as mock
+        with mock.patch("core.settings.get_settings", return_value=store):
+            bridge = Bridge()
+            # Pass unquoted boolean string from JS
+            bridge.set_setting("telemetry_enabled", "true")
+            assert store.get("telemetry_enabled") is True
+
+            bridge.set_setting("auto_download_model", "false")
+            assert store.get("auto_download_model") is False
+
+            # Pass unquoted numeric string from JS
+            bridge.set_setting("max_tokens", "1024")
+            assert store.get("max_tokens") == 1024
+
+            bridge.set_setting("temperature", "0.85")
+            assert store.get("temperature") == 0.85

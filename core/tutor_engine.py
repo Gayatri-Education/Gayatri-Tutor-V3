@@ -86,6 +86,12 @@ class TutorEngine:
                 except Exception as exc:
                     logger.debug(f"Failed to persist tutor context for session {session_id}: {exc}")
 
+    def set_context(self, session_id: str, context: TutorContext) -> None:
+        """Set teaching context for a session and persist it."""
+        with self._lock:
+            self.session_contexts[session_id] = context
+            self.save_context(session_id)
+
     def get_next_concept_for_session(self, session_id: str) -> Any:
         """Get the next concept to teach, advancing from current if mastered."""
         with self._lock:

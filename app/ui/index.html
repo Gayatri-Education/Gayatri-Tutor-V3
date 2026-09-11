@@ -213,10 +213,10 @@
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-logo">G</div>
-      <button class="sidebar-btn active" title="Chat" onclick="switchTab('chat')">💬</button>
-      <button class="sidebar-btn" title="Agents" onclick="switchTab('agents')">🤖</button>
-      <button class="sidebar-btn" title="Courses" onclick="switchTab('courses')">📚</button>
-      <button class="sidebar-btn" title="Settings" onclick="switchTab('settings')">⚙️</button>
+      <button class="sidebar-btn active" title="Chat" onclick="switchTab('chat', this)">💬</button>
+      <button class="sidebar-btn" title="Agents" onclick="switchTab('agents', this)">🤖</button>
+      <button class="sidebar-btn" title="Courses" onclick="switchTab('courses', this)">📚</button>
+      <button class="sidebar-btn" title="Settings" onclick="switchTab('settings', this)">⚙️</button>
     </div>
 
     <!-- Main -->
@@ -309,6 +309,10 @@
     // ── Chat functions ──
     function send() {
       if (isGenerating) return;
+      if (!bridge) {
+        addMessage('system', 'Connection initializing. Please wait a moment...');
+        return;
+      }
       var input = document.getElementById('userInput');
       var msg = input.value.trim();
       if (!msg) return;
@@ -366,11 +370,14 @@
       btn.textContent = isGenerating ? '...' : 'Send';
     }
 
-    function switchTab(tab) {
+    function switchTab(tab, el) {
       document.querySelectorAll('.sidebar-btn').forEach(function(b) {
         b.classList.remove('active');
       });
-      event.target.classList.add('active');
+      var target = el || (typeof event !== 'undefined' ? (event.currentTarget || event.target) : null);
+      if (target) {
+        target.classList.add('active');
+      }
     }
 
     // ── Window Controls (Frameless UI) ──

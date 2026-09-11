@@ -359,6 +359,7 @@ class AgentRegistry:
         text_lower = text.lower().strip()
 
         # 1. Explicit command check (priority 1.0)
+        command_matches: list[tuple[AgentSpec, str]] = []
         for spec in self._agents.values():
             for cmd in spec.commands:
                 cmd_lower = cmd.lower().lstrip("/")
@@ -366,8 +367,20 @@ class AgentRegistry:
                 if text_lower.startswith(cmd_prefix):
                     remainder = text_lower[len(cmd_prefix):]
                     if remainder == "" or remainder[0] in (" ", "\t", "\n"):
-                        logger.info(f"Dispatched via explicit command '{cmd}' to '{spec.name}' (confidence: 1.0)")
-                        return spec, 1.0
+                        command_matches.append((spec, cmd))
+                        break
+
+        if len(command_matches) == 1:
+            spec, cmd = command_matches[0]
+            logger.info(f"Dispatched via explicit command '{cmd}' to '{spec.name}' (confidence: 1.0)")
+            return spec, 1.0
+        elif len(command_matches) > 1:
+            names = [s.name for s, _ in command_matches]
+            logger.warning(f"Ambiguous explicit command matches multiple agents: {names}")
+            default = self.get_default_agent()
+            if default:
+                return default, 0.5
+            return None
 
         # 2. Evaluate all agents
         candidates: list[tuple[AgentSpec, float]] = []
@@ -396,7 +409,7 @@ class AgentRegistry:
         best_spec, best_score = candidates[0]
         second_spec, second_score = candidates[1]
 
-        if best_score == 1.0:
+        if best_score == 1.0 and second_score < 1.0:
             return best_spec, best_score
 
         score_diff = best_score - second_score

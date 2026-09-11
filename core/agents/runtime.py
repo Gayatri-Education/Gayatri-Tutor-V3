@@ -98,7 +98,6 @@ class AgentRuntime:
     def __init__(self, registry=None, tools=None):
         self.registry = registry or agent_registry
         self.tools = tools or tool_registry
-        self._step_count = 0
         self._max_steps = 12
 
     def process(self, user_message: str, context: AgentContext, spec: AgentSpec | None = None) -> AgentResponse:
@@ -137,12 +136,13 @@ class AgentRuntime:
                 metadata={"error": str(exc), "model_unavailable": True},
             )
         except Exception as exc:
-            logger.error(f"Agent '{spec.name}' failed with error: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category=f"agent_{spec.name}")
             return AgentResponse(
-                text=f"Agent '{spec.name}' encountered an error: {exc}",
+                text=f"Agent '{spec.name}' encountered an error: {sanitized.user_message} (Reference: {sanitized.diagnostic_id})",
                 agent_name=spec.name,
                 status="ERROR",
-                metadata={"error": str(exc)},
+                metadata={"error": sanitized.user_message, "diagnostic_id": sanitized.diagnostic_id},
             )
 
     def _agent_loop(self, agent, spec: AgentSpec, context: AgentContext) -> AgentResponse:
