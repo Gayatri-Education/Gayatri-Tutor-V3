@@ -104,3 +104,64 @@ def test_agent_runtime_sanitizes_tool_error():
     context = AgentContext(session_id="test_tool_err", user_message="run fail")
     res = runtime._agent_loop(FailingAgent(), spec, context)
     assert res.text == "Error recovered"
+
+
+def test_tool_execution_timeout():
+    """Audit #79: Tool execution timeout is enforced by ToolRegistry."""
+    import time
+    registry = ToolRegistry()
+
+    @registry.register(name="slow_tool", timeout_s=0.2)
+    def slow():
+        time.sleep(1.0)
+        return "finished"
+
+    with pytest.raises(TimeoutError, match="timed out"):
+        registry.call("slow_tool")
+
+
+def test_tool_path_traversal_blocked():
+    """Audit #80: Path traversal in tool arguments is rejected."""
+    registry = ToolRegistry()
+
+    @registry.register(name="read_file")
+    def read_file(file_path: str):
+        return f"read {file_path}"
+
+    with pytest.raises(PermissionError, match="Path traversal detected"):
+        registry.call("read_file", file_path="../../etc/passwd")
+
+    with pytest.raises(PermissionError, match="Path traversal detected"):
+        registry.call("read_file", file_path="C:\\safe\\..\\secret.txt")
+
+    # Safe path succeeds
+    assert registry.call("read_file", file_path="safe_doc.txt") == "read safe_doc.txt"
+
+
+def test_orchestrator_forced_agent_dispatch():
+    """Audit #52: Forced agent dispatch honors options.forced_agent."""
+    from core.orchestrator import Orchestrator, TurnOptions
+    from core.agents.default_agents import register_default_agents
+    register_default_agents()
+
+    orch = Orchestrator()
+    opts = TurnOptions(forced_agent="Code Reviewer")
+    spec, conf, reason = orch._resolve_agent("tell me a joke", opts)
+    assert spec is not None
+    assert spec.name == "Code Reviewer"
+    assert "forced_agent:Code Reviewer" in reason
+
+
+def test_orchestrator_forced_tier_local_only():
+    """Audit #91: In LOCAL_ONLY mode, forced_tier routes to local provider."""
+    from core.orchestrator import Orchestrator, TurnOptions
+    from core.config import ExecutionMode
+    from core.providers.local import LocalProvider
+
+    orch = Orchestrator()
+    opts = TurnOptions(forced_tier="fast")
+    prov, model_id, reason = orch._resolve_provider(opts, exec_mode=ExecutionMode.LOCAL_ONLY)
+    assert prov is LocalProvider
+    assert model_id == "local"
+    assert "forced_tier_local_only" in reason
+

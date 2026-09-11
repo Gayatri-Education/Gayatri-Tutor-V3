@@ -234,6 +234,7 @@ class TurnOptions:
     max_tokens: int = DEFAULT_MAX_TOKENS
     model_override: str | None = None
     forced_tier: str | None = None
+    forced_agent: str | None = None
 
 
 @dataclass
@@ -291,7 +292,14 @@ class Orchestrator:
         return self.conversations.get(session_id)
 
     def _resolve_agent(self, user_message: str, opts: TurnOptions):
-        """Resolve agent dispatch taking task_type into account."""
+        """Resolve agent dispatch taking forced_agent and task_type into account."""
+        if opts.forced_agent and opts.forced_agent.lower() != "auto":
+            spec = self.registry.get(opts.forced_agent)
+            if spec is not None:
+                logger.info(f"Forced agent dispatch: {spec.name}")
+                return spec, 1.0, f"forced_agent:{spec.name}"
+            logger.warning(f"Forced agent '{opts.forced_agent}' not found; checking task_type / auto-dispatch.")
+
         if opts.task_type and opts.task_type.lower() != "auto":
             task_key = opts.task_type.lower().strip()
             # If task_type indicates a speed preference, map to forced_tier
@@ -368,6 +376,10 @@ class Orchestrator:
             return target_provider, target_model_id, f"model_override:{target_provider.key}/{target_model_id}"
 
         if opts.forced_tier:
+            if exec_mode == ExecutionMode.LOCAL_ONLY:
+                logger.info(f"Forced tier '{opts.forced_tier}' mapped to local model due to LOCAL_ONLY mode.")
+                return LocalProvider, "local", f"forced_tier_local_only:{opts.forced_tier}"
+
             from core.providers.base import SpeedTier
             from core.providers.registry import get_registry
             try:
