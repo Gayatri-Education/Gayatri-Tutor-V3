@@ -68,8 +68,9 @@ class Bridge(QObject):
                 tutor_ctx = tutor.session_contexts.get(session_id) if tutor else None
                 store.save_session(session_id, conv, tutor_context=tutor_ctx)
         except Exception as exc:
-            logger.error(f"Failed to save session {session_id}: {exc}")
-            self.error.emit(f"Warning: Failed to save session: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_save_session")
+            self.error.emit(f"Warning: Failed to save session: {sanitized.user_message}")
 
     def _save_current_session(self):
         self._save_session_by_id(self._session_id)
@@ -135,9 +136,10 @@ class Bridge(QObject):
                 elif token:
                     self.token.emit(0, token)
         except Exception as exc:
-            logger.error(f"send_message error: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_send_message")
             if self._session_id == generation_session_id:
-                self.error.emit(str(exc))
+                self.error.emit(sanitized.user_message)
                 self.done.emit()
         finally:
             self._generation_active = False
@@ -175,11 +177,12 @@ class Bridge(QObject):
                 })
             return json.dumps({"ok": True, "sessions": result})
         except Exception as exc:
-            logger.error(f"Error in get_sessions: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_get_sessions")
             return json.dumps({
                 "ok": False,
                 "sessions": [],
-                "error": str(exc),
+                "error": sanitized.user_message,
                 "recoverable": True
             })
 
@@ -197,7 +200,9 @@ class Bridge(QObject):
             store.set(key, parsed)
             logger.debug(f"Setting: {key} = {parsed!r}")
         except Exception as exc:
-            logger.error(f"set_setting failed: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_set_setting")
+            self.error.emit(f"Failed to update setting '{key}': {sanitized.user_message}")
 
     @Slot(str, result=str)
     def get_setting(self, key: str) -> str:
@@ -231,8 +236,9 @@ class Bridge(QObject):
 
             return json.dumps(status)
         except Exception as exc:
-            logger.error(f"get_local_model_status error: {exc}")
-            return json.dumps({"installed": False, "error": str(exc), "reason_code": "unknown_error"})
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_get_local_model_status")
+            return json.dumps({"installed": False, "error": sanitized.user_message, "reason_code": "unknown_error"})
 
     @Slot(result=str)
     def get_providers(self) -> str:
@@ -279,8 +285,9 @@ class Bridge(QObject):
 
             return json.dumps({"valid": valid, "message": msg})
         except Exception as exc:
-            logger.error(f"validate_provider_key error: {exc}")
-            return json.dumps({"valid": False, "message": str(exc)[:200]})
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_validate_provider_key")
+            return json.dumps({"valid": False, "message": sanitized.user_message})
 
     @Slot(str, str)
     def save_provider_key(self, provider_key: str, api_key: str):
@@ -291,8 +298,9 @@ class Bridge(QObject):
             vault.store_key(provider_key, api_key)
             logger.info(f"Provider key saved: {provider_key}")
         except Exception as exc:
-            logger.error(f"save_provider_key error: {exc}")
-            self.error.emit(f"Failed to save key: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_save_provider_key")
+            self.error.emit(f"Failed to save key: {sanitized.user_message}")
 
     @Slot(result=str)
     def get_model_catalog(self) -> str:
@@ -344,13 +352,10 @@ class Bridge(QObject):
                 self.token.emit(0, f"Digest: {result['digest'][:16]}...")
                 self.done.emit()
 
-            except OllamaPullError as exc:
-                logger.error(f"Model download failed: {exc}")
-                self.error.emit(json.dumps({"status": "error", "message": str(exc)[:300]}))
-                self.done.emit()
             except Exception as exc:
-                logger.error(f"Model download unexpected error: {exc}")
-                self.error.emit(json.dumps({"status": "error", "message": str(exc)[:300]}))
+                from core.errors import sanitize_error
+                sanitized = sanitize_error(exc, category="bridge_model_download")
+                self.error.emit(json.dumps({"status": "error", "message": sanitized.user_message}))
                 self.done.emit()
             finally:
                 self._download_active = False
@@ -392,8 +397,9 @@ class Bridge(QObject):
             })
 
         except Exception as exc:
-            logger.error(f"install_model error: {exc}")
-            return json.dumps({"status": "error", "message": str(exc)[:200]})
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_install_model")
+            return json.dumps({"status": "error", "message": sanitized.user_message})
 
     @Slot(str)
     def load_session_id(self, session_id: str):
@@ -415,5 +421,6 @@ class Bridge(QObject):
 
             logger.info(f"Loaded session {session_id}: {len(messages)} messages")
         except Exception as exc:
-            logger.error(f"load_session_id error: {exc}")
-            self.error.emit(str(exc))
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_load_session")
+            self.error.emit(f"Failed to load session: {sanitized.user_message}")

@@ -362,11 +362,12 @@ class Orchestrator:
                 execution_mode=exec_mode.value,
             )
         except Exception as exc:
-            logger.error(f"Local model generation failed: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="orchestrator_submit")
             conv.add("user", user_message)
             latency = (time.time() - start) * 1000
             return TurnResult(
-                text=f"I encountered an error: {exc}. Please try again.",
+                text=f"I encountered an error: {sanitized.user_message} (Reference: {sanitized.diagnostic_id})",
                 model_used="local",
                 routing_reason=f"error:{type(exc).__name__}",
                 latency_ms=latency,
@@ -443,9 +444,10 @@ class Orchestrator:
                 buffer.append(token)
                 yield token, False
         except Exception as exc:
-            logger.error(f"Streaming failed: {exc}")
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="orchestrator_stream")
             conv.add("user", user_message)
-            raise RuntimeError(f"Streaming failed: {exc}") from exc
+            raise RuntimeError(f"Streaming failed: {sanitized.user_message}") from exc
 
         full_text = "".join(buffer)
         conv.add("user", user_message)

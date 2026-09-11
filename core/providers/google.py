@@ -59,7 +59,8 @@ class GoogleProvider(LLMProvider):
         try:
             import httpx
             response = httpx.get(
-                f"{self._base_url()}/models?key={self._api_key}",
+                f"{self._base_url()}/models",
+                headers={"x-goog-api-key": self._api_key},
                 timeout=10.0,
             )
             if response.status_code == 200:
@@ -71,7 +72,8 @@ class GoogleProvider(LLMProvider):
         except ImportError:
             return False, "httpx not installed"
         except Exception as exc:
-            return False, str(exc)[:200]
+            from core.errors import sanitize_message
+            return False, sanitize_message(str(exc))[:200]
 
     def list_models(self) -> list[ModelInfo]:
         """Fetch models from Google API, with known model fallbacks."""
@@ -82,7 +84,8 @@ class GoogleProvider(LLMProvider):
         try:
             import httpx
             response = httpx.get(
-                f"{self._base_url()}/models?key={self._api_key}",
+                f"{self._base_url()}/models",
+                headers={"x-goog-api-key": self._api_key},
                 timeout=15.0,
             )
             if response.status_code == 200:
@@ -177,8 +180,8 @@ class GoogleProvider(LLMProvider):
 
         try:
             response = httpx.post(
-                f"{self._base_url()}/models/{model_id}:generateContent?key={self._api_key}",
-                headers={"Content-Type": "application/json"},
+                f"{self._base_url()}/models/{model_id}:generateContent",
+                headers={"Content-Type": "application/json", "x-goog-api-key": self._api_key},
                 json=payload,
                 timeout=120.0,
             )
@@ -205,8 +208,10 @@ class GoogleProvider(LLMProvider):
                 finish_reason=candidates[0].get("finishReason", "STOP"),
             )
         except Exception as exc:
-            logger.error(f"Google chat failed: {exc}")
-            raise RuntimeError(f"Google chat failed: {exc}") from exc
+            from core.errors import sanitize_message
+            clean_msg = sanitize_message(str(exc))
+            logger.error(f"Google chat failed: {clean_msg}")
+            raise RuntimeError(f"Google chat failed: {clean_msg}") from exc
 
     def stream(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> Iterator[str]:
         """Stream chat completion."""
@@ -232,18 +237,21 @@ class GoogleProvider(LLMProvider):
         try:
             with httpx.stream(
                 "POST",
-                f"{self._base_url()}/models/{model_id}:streamGenerateContent?key={self._api_key}&alt=sse",
-                headers={"Content-Type": "application/json"},
+                f"{self._base_url()}/models/{model_id}:streamGenerateContent?alt=sse",
+                headers={"Content-Type": "application/json", "x-goog-api-key": self._api_key},
                 json=payload,
                 timeout=120.0,
             ) as response:
                 response.raise_for_status()
                 for line in response.iter_lines():
                     if line.startswith("data: "):
+                        raw = line[6:].strip()
+                        if not raw or raw == "[DONE]":
+                            continue
                         try:
-                            import json as json_mod
-                            data = json_mod.loads(line[6:])
-                            candidates = data.get("candidates", [])
+                            import json
+                            chunk = json.loads(raw)
+                            candidates = chunk.get("candidates", [])
                             if candidates:
                                 parts = candidates[0].get("content", {}).get("parts", [])
                                 for p in parts:
@@ -253,8 +261,10 @@ class GoogleProvider(LLMProvider):
                         except (ImportError, Exception):
                             continue
         except Exception as exc:
-            logger.error(f"Google stream failed: {exc}")
-            raise RuntimeError(f"Google stream failed: {exc}") from exc
+            from core.errors import sanitize_message
+            clean_msg = sanitize_message(str(exc))
+            logger.error(f"Google stream failed: {clean_msg}")
+            raise RuntimeError(f"Google stream failed: {clean_msg}") from exc
 
     def supports_tools(self) -> bool:
         return True
