@@ -8,23 +8,19 @@ from __future__ import annotations
 
 import logging
 
-from core.agents.registry import AgentResponse, agent_registry
+from core.agents.registry import AgentResponse, ModelUnavailableError, agent_registry
 
 logger = logging.getLogger("gayatri.agents.prompts")
 
 
 def _local_chat(messages: list[dict], max_tokens: int = 300) -> str:
-    """Call the local model with full message list. Falls back gracefully."""
+    """Call the local model with full message list. Raises ModelUnavailableError on failure."""
     try:
         from core.providers.local import LocalProvider
         return LocalProvider.chat(messages, max_tokens=max_tokens)
     except Exception as exc:
         logger.warning(f"Local model unavailable: {exc}")
-        return (
-            "I'm running without the local model right now. "
-            "Once the model file is downloaded and placed in the models directory, "
-            "I'll be able to help properly."
-        )
+        raise ModelUnavailableError(f"Local model unavailable: {exc}") from exc
 
 
 def _build_messages(system: str, user_message: str,

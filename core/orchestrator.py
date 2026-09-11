@@ -212,6 +212,7 @@ class TurnResult:
     latency_ms: float = 0.0
     agent_name: str = ""
     execution_mode: str = "local_only"  # "local_only" | "cloud_allowed"
+    status: str = "SUCCESS"  # "SUCCESS" | "MODEL_UNAVAILABLE" | "ERROR"
 
 
 class Orchestrator:
@@ -262,6 +263,20 @@ class Orchestrator:
             response = self.runtime.process(user_message, context, spec=spec)
 
             if response.text:
+                if getattr(response, "status", "SUCCESS") == "MODEL_UNAVAILABLE":
+                    logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE")
+                    conv.add("user", user_message, agent_name=spec.name)
+                    latency = (time.time() - start) * 1000
+                    return TurnResult(
+                        text=response.text,
+                        model_used=f"agent:{spec.name}",
+                        routing_reason="agent_error:model_unavailable",
+                        latency_ms=latency,
+                        agent_name=spec.name,
+                        execution_mode=exec_mode.value,
+                        status="MODEL_UNAVAILABLE",
+                    )
+
                 if spec.name == "Tutor":
                     _post_tutor_response(session_id)
                 conv.add("user", user_message, agent_name=spec.name)
@@ -274,6 +289,7 @@ class Orchestrator:
                     latency_ms=latency,
                     agent_name=spec.name,
                     execution_mode=exec_mode.value,
+                    status="SUCCESS",
                 )
 
         # 2. No agent matched — query the local model directly
@@ -347,6 +363,12 @@ class Orchestrator:
             response = self.runtime.process(user_message, context, spec=spec)
 
             if response.text:
+                if getattr(response, "status", "SUCCESS") == "MODEL_UNAVAILABLE":
+                    logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE in stream")
+                    conv.add("user", user_message, agent_name=spec.name)
+                    yield response.text, True
+                    return
+
                 if spec.name == "Tutor":
                     _post_tutor_response(session_id)
                 conv.add("user", user_message, agent_name=spec.name)

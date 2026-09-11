@@ -83,6 +83,11 @@ class AgentSpec:
         return best_score >= threshold, best_score
 
 
+class ModelUnavailableError(Exception):
+    """Raised when the local model is unavailable or fails inference."""
+    pass
+
+
 @dataclass
 class AgentResponse:
     """Response from an agent."""
@@ -90,6 +95,7 @@ class AgentResponse:
     agent_name: str
     tool_calls: list[dict] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
+    status: str = "SUCCESS"  # SUCCESS | MODEL_UNAVAILABLE | ERROR
 
 
 class AgentRegistry:

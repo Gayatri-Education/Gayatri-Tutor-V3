@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.agents.registry import AgentResponse, AgentSpec, agent_registry
+from core.agents.registry import AgentResponse, AgentSpec, ModelUnavailableError, agent_registry
 
 logger = logging.getLogger("gayatri.agents.runtime")
 
@@ -81,13 +81,32 @@ class AgentRuntime:
                 )
             spec, confidence = dispatch
 
-        # 2. Instantiate and run the agent
-        agent = self.registry.instantiate(spec.name)
+        try:
+            # 2. Instantiate and run the agent
+            agent = self.registry.instantiate(spec.name)
 
-        # 3. Process through agent loop (handle tool calls)
-        response = self._agent_loop(agent, spec, context)
-
-        return response
+            # 3. Process through agent loop (handle tool calls)
+            response = self._agent_loop(agent, spec, context)
+            return response
+        except ModelUnavailableError as exc:
+            logger.warning(f"Agent '{spec.name}' failed: local model is unavailable ({exc})")
+            return AgentResponse(
+                text=(
+                    "The local AI model is not installed or unavailable. "
+                    "Please download the model file to enable this agent."
+                ),
+                agent_name=spec.name,
+                status="MODEL_UNAVAILABLE",
+                metadata={"error": str(exc), "model_unavailable": True},
+            )
+        except Exception as exc:
+            logger.error(f"Agent '{spec.name}' failed with error: {exc}")
+            return AgentResponse(
+                text=f"Agent '{spec.name}' encountered an error: {exc}",
+                agent_name=spec.name,
+                status="ERROR",
+                metadata={"error": str(exc)},
+            )
 
     def _agent_loop(self, agent, spec: AgentSpec, context: AgentContext) -> AgentResponse:
         """Run the agent, handling tool calls in a loop."""
