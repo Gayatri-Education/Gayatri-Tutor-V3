@@ -16,7 +16,7 @@ from typing import Any
 
 from core.agents.registry import agent_registry
 from core.agents.runtime import AgentContext, AgentRuntime
-from core.config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
+from core.config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, ExecutionMode
 from core.conversation import Conversation, ConversationStore
 from core.privacy import get_redactor
 
@@ -75,6 +75,17 @@ def _redact_pii(text: str) -> str:
     if result.has_pii:
         logger.info(f"PII redacted: {redactor.get_redaction_summary(result)}")
     return result.clean_text
+
+
+def _get_execution_mode() -> ExecutionMode:
+    """Read the current privacy/execution mode from settings."""
+    try:
+        from core.settings import get_settings
+        mode_str = get_settings().get("privacy_mode", "local_only")
+        return ExecutionMode(mode_str)
+    except (ValueError, Exception):
+        # Default to safest mode
+        return ExecutionMode.LOCAL_ONLY
 
 
 def _inject_tutor_context(context: AgentContext, session_id: str) -> None:
@@ -200,6 +211,7 @@ class TurnResult:
     tokens_used: int = 0
     latency_ms: float = 0.0
     agent_name: str = ""
+    execution_mode: str = "local_only"  # "local_only" | "cloud_allowed"
 
 
 class Orchestrator:
@@ -221,6 +233,7 @@ class Orchestrator:
         """Process a user message and return the full response."""
         opts = options or TurnOptions()
         start = time.time()
+        exec_mode = _get_execution_mode()
         
         # Redact PII upfront so all agents and conversation history are safe
         user_message = _redact_pii(user_message)
@@ -260,6 +273,7 @@ class Orchestrator:
                     routing_reason=f"agent_dispatch:{spec.name}:{confidence:.2f}",
                     latency_ms=latency,
                     agent_name=spec.name,
+                    execution_mode=exec_mode.value,
                 )
 
         # 2. No agent matched — query the local model directly
@@ -293,6 +307,7 @@ class Orchestrator:
             model_used="local",
             routing_reason="no_agent_match:local_fallback",
             latency_ms=latency,
+            execution_mode=exec_mode.value,
         )
 
     def stream(self, user_message: str, session_id: str = "default",

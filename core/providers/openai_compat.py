@@ -164,6 +164,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
     def chat(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> ChatResponse:
         """Non-streaming chat completion."""
+        self.check_privacy_policy()
         opts = options or ChatOptions()
         httpx = self._get_client()
         start = time.time()
@@ -221,6 +222,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
     def stream(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> Iterator[str]:
         """Stream chat completion tokens."""
+        self.check_privacy_policy()
         opts = options or ChatOptions()
         httpx = self._get_client()
         start = time.time()

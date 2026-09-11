@@ -150,6 +150,7 @@ class GoogleProvider(LLMProvider):
 
     def chat(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> ChatResponse:
         """Non-streaming chat completion."""
+        self.check_privacy_policy()
         opts = options or ChatOptions()
 
         import httpx
@@ -209,6 +210,7 @@ class GoogleProvider(LLMProvider):
 
     def stream(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> Iterator[str]:
         """Stream chat completion."""
+        self.check_privacy_policy()
         opts = options or ChatOptions()
         import httpx
 
