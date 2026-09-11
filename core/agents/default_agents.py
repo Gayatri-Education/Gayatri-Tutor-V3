@@ -107,8 +107,8 @@ def register_default_agents() -> None:
     try:
         from core.agents.prompt_agents import register_prompt_agents as _reg_prompts
         _reg_prompts()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(f"Failed to register prompt agents: {exc}")
 
     # Now register the four default agents (also idempotent)
     if agent_registry.get("Tutor") is not None:

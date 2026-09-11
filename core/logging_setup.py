@@ -12,6 +12,7 @@ from core.config import LOG_BACKUP_COUNT, LOG_DATE_FORMAT, LOG_DIR, LOG_FORMAT, 
 # Patterns that should NEVER appear in logs
 _CREDENTIAL_PATTERNS = [
     re.compile(r"sk-[a-zA-Z0-9]{20,}"),           # OpenAI keys
+    re.compile(r"sk-ant-[a-zA-Z0-9_\-]{20,}"),     # Anthropic keys (Audit #92)
     re.compile(r"AIza[0-9A-Za-z\-_]{35}"),        # Google API keys
     re.compile(r"(?i)api[_-]?key\s*[:=]\s*\S+"),   # Generic API key assignments
     re.compile(r"(?i)password\s*[:=]\s*\S+"),      # Password assignments

@@ -110,8 +110,9 @@ class Bridge(QObject):
     # ── Slots (callable from JavaScript) ────────────────────────────────
 
     @Slot(str)
-    def send_message(self, message: str):
-        """Receive a user message, route through agent/model, stream tokens back."""
+    @Slot(str, str)
+    def send_message(self, message: str, agent_name: str = ""):
+        """Receive a user message, route through agent/model, stream tokens back (Audit #52 & #53)."""
         if self._generation_active:
             self.error.emit("Please wait for the current response to finish.")
             return
@@ -120,8 +121,13 @@ class Bridge(QObject):
         self._generation_active = True
         generation_session_id = self._session_id
 
+        opts = None
+        if agent_name and agent_name.lower() != "auto":
+            from core.orchestrator import TurnOptions
+            opts = TurnOptions(forced_agent=agent_name)
+
         try:
-            for token, is_done in orch.stream(message, session_id=generation_session_id):
+            for token, is_done in orch.stream(message, session_id=generation_session_id, options=opts):
                 # Verify session hasn't switched during generation (Audit #134)
                 if self._session_id != generation_session_id:
                     logger.warning(
@@ -193,6 +199,70 @@ class Bridge(QObject):
                 "recoverable": True
             })
 
+    @Slot(result=str)
+    def get_agents(self) -> str:
+        """Return list of available agents with metadata as JSON (Audit #52 & #54)."""
+        try:
+            self._get_orchestrator()  # ensures default agents are registered
+            from core.agents.registry import agent_registry
+            agents = agent_registry.list_agents()
+            result = [
+                {
+                    "name": a["name"],
+                    "description": a.get("description", ""),
+                    "commands": a.get("commands", []),
+                    "triggers": a.get("triggers", []),
+                }
+                for a in agents
+            ]
+            return json.dumps({"ok": True, "agents": result})
+        except Exception as exc:
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_get_agents")
+            return json.dumps({"ok": False, "agents": [], "error": sanitized.user_message})
+
+    @Slot(result=str)
+    def get_curriculum_progress(self) -> str:
+        """Return curriculum progress and LDG concepts as JSON (Audit #55)."""
+        try:
+            orch = self._get_orchestrator()
+            ldg = orch.get_ldg() if hasattr(orch, "get_ldg") else None
+            if ldg is None:
+                from core.knowledge_graph import get_ldg
+                ldg = get_ldg()
+
+            if ldg is None:
+                return json.dumps({
+                    "ok": True,
+                    "stats": {"total": 0, "mastered": 0, "in_progress": 0, "mastery_pct": 0.0},
+                    "concepts": [],
+                })
+
+            stats = ldg.get_progress_stats()
+            concepts = []
+            for c in ldg.list_concepts():
+                concepts.append({
+                    "id": c.id,
+                    "name": c.name,
+                    "description": c.description,
+                    "subject": c.subject,
+                    "difficulty": c.difficulty,
+                    "mastery": c.mastery,
+                    "mastery_pct": int(c.mastery * 100),
+                    "unlocked": ldg.is_unlocked(c.id),
+                    "prerequisites": ldg.get_prerequisites(c.id),
+                })
+
+            return json.dumps({
+                "ok": True,
+                "stats": stats,
+                "concepts": concepts,
+            })
+        except Exception as exc:
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_get_curriculum_progress")
+            return json.dumps({"ok": False, "error": sanitized.user_message, "stats": {}, "concepts": []})
+
     @Slot(str, str)
     def set_setting(self, key: str, value: str):
         """Persist a setting (value is JSON-stringified from JS)."""
@@ -205,24 +275,31 @@ class Bridge(QObject):
             except (json.JSONDecodeError, ValueError):
                 parsed = value
 
-            # Defensively coerce string representation if schema expects primitive type
-            if isinstance(parsed, str) and key in _SETTINGS_SCHEMA:
+            # Defensively coerce representation if schema expects primitive type
+            if key in _SETTINGS_SCHEMA:
                 expected_type = _SETTINGS_SCHEMA[key]
                 if expected_type is bool:
-                    if parsed.lower() in ("true", "1", "yes"):
-                        parsed = True
-                    elif parsed.lower() in ("false", "0", "no"):
-                        parsed = False
+                    if isinstance(parsed, bool):
+                        pass
+                    elif isinstance(parsed, str):
+                        if parsed.lower() in ("true", "1", "yes"):
+                            parsed = True
+                        elif parsed.lower() in ("false", "0", "no"):
+                            parsed = False
+                    elif isinstance(parsed, (int, float)):
+                        parsed = bool(parsed)
                 elif expected_type is int:
-                    try:
-                        parsed = int(parsed)
-                    except ValueError:
-                        pass
+                    if not isinstance(parsed, bool):
+                        try:
+                            parsed = int(parsed)
+                        except (ValueError, TypeError):
+                            pass
                 elif expected_type is float:
-                    try:
-                        parsed = float(parsed)
-                    except ValueError:
-                        pass
+                    if not isinstance(parsed, bool):
+                        try:
+                            parsed = float(parsed)
+                        except (ValueError, TypeError):
+                            pass
 
             store.set(key, parsed)
             logger.debug(f"Setting: {key} = {parsed!r}")
@@ -325,13 +402,18 @@ class Bridge(QObject):
             from core.security.secrets import get_vault
             from core.providers.registry import get_registry
             vault = get_vault()
-            vault.store_key(provider_key, api_key)
-            logger.info(f"Provider key saved: {provider_key}")
+            clean_key = api_key.strip()
+            if not clean_key:
+                vault.delete_key(provider_key)
+                logger.info(f"Provider key deleted: {provider_key}")
+            else:
+                vault.store_key(provider_key, clean_key)
+                logger.info(f"Provider key saved: {provider_key}")
 
             registry = get_registry()
             provider = registry.get(provider_key)
             if provider is not None and hasattr(provider, "_api_key"):
-                provider._api_key = api_key
+                provider._api_key = clean_key if clean_key else None
                 provider._models = None
         except Exception as exc:
             from core.errors import sanitize_error

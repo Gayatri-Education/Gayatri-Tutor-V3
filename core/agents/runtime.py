@@ -71,7 +71,7 @@ class ToolRegistry:
         return list(self._tools.keys())
 
     def call(self, name: str, **kwargs) -> Any:
-        """Execute a tool by name with validated arguments."""
+        """Execute a tool by name with validated arguments, path safety, and timeout enforcement."""
         spec = self._tools.get(name)
         if spec is None:
             raise ValueError(f"Tool '{name}' not found. Available: {self.list_tools()}")
@@ -85,7 +85,29 @@ class ToolRegistry:
                         f"got {type(kwargs[arg_name]).__name__}"
                     )
 
+        # Path traversal guard for file/path arguments (Audit #80)
+        from pathlib import Path
+        for arg_name, arg_val in kwargs.items():
+            if isinstance(arg_val, str) and any(k in arg_name.lower() for k in ("path", "file", "dir")):
+                if ".." in Path(arg_val).parts:
+                    raise PermissionError(
+                        f"Path traversal detected in argument '{arg_name}': parent directory traversal ('..') is strictly prohibited."
+                    )
+
         logger.info(f"Tool call: {name}({kwargs})")
+
+        # Enforce tool execution timeout (Audit #79)
+        if spec.timeout_s and spec.timeout_s > 0:
+            import concurrent.futures
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
+                future = executor.submit(spec.func, **kwargs)
+                return future.result(timeout=spec.timeout_s)
+            except concurrent.futures.TimeoutError as exc:
+                raise TimeoutError(f"Tool '{name}' execution timed out after {spec.timeout_s}s") from exc
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
+
         return spec.func(**kwargs)
 
 

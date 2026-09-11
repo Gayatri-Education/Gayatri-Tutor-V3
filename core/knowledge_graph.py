@@ -620,3 +620,16 @@ def load_curriculum(graph: LearningDependencyGraph, curriculum_path: str | Path)
     subject_label = data.get("subject", "unknown")
     logger.info(f"Loaded curriculum '{subject_label}': {concepts_added} concepts")
     return concepts_added
+
+
+def get_ldg(db_path: str | Path | None = None) -> LearningDependencyGraph:
+    """Get the active LearningDependencyGraph instance."""
+    try:
+        from core.orchestrator import _get_ldg
+        ldg = _get_ldg()
+        if ldg is not None and db_path is None:
+            return ldg
+    except Exception:
+        pass
+    return LearningDependencyGraph(db_path=db_path)
+
