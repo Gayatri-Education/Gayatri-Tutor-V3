@@ -26,30 +26,44 @@ class Message:
 
 @dataclass
 class Conversation:
-    """Rolling conversation history for one session."""
+    """Conversation history for one session.
+    
+    Retains full conversation history for UI and persistence (up to max_history turns),
+    while get_messages_for_model() provides a trimmed rolling window bounded by max_messages
+    for LLM prompt context.
+    """
     session_id: str
     max_messages: int = 20
+    max_history: int = 5000
     _messages: list[Message] = field(default_factory=list, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def add(self, role: str, content: str, agent_name: str = "") -> None:
-        """Append a message and trim if over limit."""
+        """Append a message to the conversation history."""
         with self._lock:
             self._messages.append(Message(role=role, content=content, agent_name=agent_name))
-            # Keep last system message + (max_messages - 1) turns
-            if len(self._messages) > self.max_messages:
-                # Preserve system messages, drop oldest user/assistant pairs
+            if len(self._messages) > self.max_history:
+                # Cap extremely large desktop sessions to max_history, preserving system messages
                 system_msgs = [m for m in self._messages if m.role == "system"]
                 other_msgs = [m for m in self._messages if m.role != "system"]
-                num_keep = max(0, self.max_messages - len(system_msgs))
+                num_keep = max(0, self.max_history - len(system_msgs))
                 keep = other_msgs[-num_keep:] if num_keep > 0 else []
                 self._messages = system_msgs + keep
             logger.debug(f"[{self.session_id}] +{role} ({len(self._messages)} msgs)")
 
-    def get_messages_for_model(self) -> list[dict]:
-        """Return messages formatted for LLM input (list of {role, content})."""
+    def get_messages_for_model(self, max_messages: int | None = None) -> list[dict]:
+        """Return messages formatted for LLM input (list of {role, content}), trimmed to limit."""
         with self._lock:
-            return [{"role": m.role, "content": m.content} for m in self._messages]
+            limit = max_messages or self.max_messages
+            if len(self._messages) <= limit:
+                return [{"role": m.role, "content": m.content} for m in self._messages]
+
+            # Preserve system messages, take recent turns up to limit
+            system_msgs = [m for m in self._messages if m.role == "system"]
+            other_msgs = [m for m in self._messages if m.role != "system"]
+            num_keep = max(0, limit - len(system_msgs))
+            keep = other_msgs[-num_keep:] if num_keep > 0 else []
+            return [{"role": m.role, "content": m.content} for m in (system_msgs + keep)]
 
     def get_recent(self, n: int = 5) -> list[Message]:
         """Return the last n messages."""

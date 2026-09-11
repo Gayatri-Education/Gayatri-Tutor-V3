@@ -57,11 +57,12 @@ class Bridge(QObject):
 
     def _save_session_by_id(self, session_id: str):
         try:
-            if not self._orchestrator:
+            if not self._orchestrator or not session_id:
                 return
+            from core.session import get_session_store, validate_session_id
+            session_id = validate_session_id(session_id)
             conv = self._orchestrator.get_conversation(session_id)
             if conv and conv.get_all():
-                from core.session import get_session_store
                 from core.tutor_engine import get_tutor_engine
                 store = get_session_store()
                 tutor = self._orchestrator.get_tutor_engine() if hasattr(self._orchestrator, "get_tutor_engine") else get_tutor_engine()
@@ -164,17 +165,17 @@ class Bridge(QObject):
             from core.session import get_session_store
             store = get_session_store()
             sessions = store.list_sessions()
-            result = []
-            for s in sessions:
-                msgs = store.load_session(s["id"])
-                result.append({
+            result = [
+                {
                     "id": s["id"],
                     "title": s.get("title", s["id"][:20]),
                     "created_at": s.get("created_at", ""),
                     "updated_at": s.get("updated_at", ""),
-                    "message_count": s.get("message_count", len(msgs)),
-                    "preview": msgs[0]["content"][:80] if msgs else "",
-                })
+                    "message_count": s.get("message_count", 0),
+                    "preview": s.get("preview", ""),
+                }
+                for s in sessions
+            ]
             return json.dumps({"ok": True, "sessions": result})
         except Exception as exc:
             from core.errors import sanitize_error
@@ -437,8 +438,9 @@ class Bridge(QObject):
             self.error.emit("Cannot switch session while a response is generating.")
             return
         try:
+            from core.session import get_session_store, validate_session_id
+            session_id = validate_session_id(session_id)
             self._save_current_session()
-            from core.session import get_session_store
 
             store = get_session_store()
             messages = store.load_session(session_id)
@@ -453,3 +455,30 @@ class Bridge(QObject):
             from core.errors import sanitize_error
             sanitized = sanitize_error(exc, category="bridge_load_session")
             self.error.emit(f"Failed to load session: {sanitized.user_message}")
+
+    @Slot(str, result=str)
+    def delete_session(self, session_id: str) -> str:
+        """Delete a saved session from SQLite and in-memory orchestrator."""
+        if self._generation_active and self._session_id == session_id:
+            return json.dumps({"ok": False, "error": "Cannot delete active generating session."})
+        try:
+            from core.session import get_session_store, validate_session_id
+            session_id = validate_session_id(session_id)
+            store = get_session_store()
+            store.delete_session(session_id)
+
+            if self._orchestrator:
+                self._orchestrator.conversations.delete(session_id)
+
+            # If deleting the currently active session, initialize a fresh one
+            if self._session_id == session_id:
+                import uuid
+                self._session_id = str(uuid.uuid4())
+                if self._orchestrator:
+                    self._orchestrator.new_session(self._session_id)
+
+            return json.dumps({"ok": True, "session_id": session_id})
+        except Exception as exc:
+            from core.errors import sanitize_error
+            sanitized = sanitize_error(exc, category="bridge_delete_session")
+            return json.dumps({"ok": False, "error": sanitized.user_message})

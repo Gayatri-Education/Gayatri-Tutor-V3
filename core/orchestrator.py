@@ -605,6 +605,11 @@ class Orchestrator:
             tutor = self.get_tutor_engine()
             if tutor and hasattr(tutor, "clear_session"):
                 tutor.clear_session(session_id)
+            try:
+                from core.session import get_session_store
+                get_session_store().clear_session_messages(session_id)
+            except Exception as exc:
+                logger.debug(f"Could not clear persisted session {session_id}: {exc}")
 
     def get_conversation(self, session_id: str = "default") -> Conversation:
         return self._get_conversation(session_id)

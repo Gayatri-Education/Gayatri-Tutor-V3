@@ -8,6 +8,7 @@ Uses the DB_PATH configured in core.config.
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import threading
 from datetime import datetime
@@ -15,6 +16,26 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("gayatri.session")
+
+_SESSION_ID_REGEX = re.compile(r"^[a-zA-Z0-9_\-:]{1,128}$")
+
+
+def validate_session_id(session_id: str) -> str:
+    """Validate that a session ID meets strict security criteria (Audit #132 & #133).
+
+    Prevents path traversal ('../'), command injection, control characters,
+    and null bytes at the persistence boundary.
+    """
+    if not isinstance(session_id, str):
+        raise ValueError(f"Session ID must be a string, got {type(session_id).__name__}")
+    if not session_id or len(session_id) > 128:
+        raise ValueError(f"Session ID length must be between 1 and 128 characters (got {len(session_id)})")
+    if not _SESSION_ID_REGEX.match(session_id):
+        raise ValueError(
+            f"Invalid session ID '{session_id}': must contain only 1-128 alphanumeric characters, "
+            "underscores, hyphens, and colons without path traversal characters."
+        )
+    return session_id
 
 
 class SessionStore:
@@ -89,55 +110,170 @@ class SessionStore:
     def save_session(self, session_id: str, conversation: Any, tutor_context: Any = None) -> None:
         """Save a conversation and optional tutor context to the database.
 
+        Uses O(1) incremental appending (Audit #30) when previous messages match,
+        avoiding O(N^2) table thrashing and autoincrement sequence churning.
+        Validates session_id format strictly (Audit #132 & #133).
+
         Args:
             session_id: Unique session identifier
-            conversation: Conversation object with get_all() method
+            conversation: Conversation object with get_all() method (or list of dicts)
             tutor_context: Optional TutorContext object
         """
+        session_id = validate_session_id(session_id)
         with self._lock:
             conn = self.conn
             now = datetime.now().isoformat()
-            messages = conversation.get_all()
+            messages = conversation.get_all() if hasattr(conversation, "get_all") else list(conversation)
+            n_msgs = len(messages)
+            first_preview = messages[0]["content"][:80] if messages else ""
 
-            # Upsert session
+            # 1. Ensure parent session record exists first to satisfy FOREIGN KEY constraint
             conn.execute(
                 """INSERT INTO sessions (id, title, created_at, updated_at, message_count)
                    VALUES (?, ?, ?, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET
-                       title = excluded.title,
+                       title = CASE WHEN sessions.title IS NULL OR sessions.title = '' THEN excluded.title ELSE sessions.title END,
                        updated_at = excluded.updated_at,
                        message_count = excluded.message_count""",
-                (
-                    session_id,
-                    messages[0]["content"][:80] if messages else "",
-                    now,
-                    now,
-                    len(messages),
-                ),
+                (session_id, first_preview, now, now, n_msgs),
             )
 
-            # Replace all messages for this session
-            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-            for msg in messages:
-                conn.execute(
-                    "INSERT INTO messages (session_id, role, content, agent_name, timestamp) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (
-                        session_id,
-                        msg["role"],
-                        msg["content"],
-                        msg.get("agent_name", ""),
-                        msg.get("timestamp", now),
-                    ),
-                )
+            # 2. Check existing message count and latest message for incremental append (Audit #30)
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM messages WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            db_count = row["cnt"] if row else 0
+
+            is_incremental = False
+            if 0 < db_count <= n_msgs:
+                last_db = conn.execute(
+                    "SELECT role, content FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+                    (session_id,),
+                ).fetchone()
+                if (
+                    last_db
+                    and last_db["role"] == messages[db_count - 1]["role"]
+                    and last_db["content"] == messages[db_count - 1]["content"]
+                ):
+                    is_incremental = True
+
+            if is_incremental:
+                # Incremental append: insert only messages[db_count:] without deleting anything (Audit #30)
+                new_slice = messages[db_count:]
+                if new_slice:
+                    conn.executemany(
+                        "INSERT INTO messages (session_id, role, content, agent_name, timestamp) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        [
+                            (
+                                session_id,
+                                m["role"],
+                                m["content"],
+                                m.get("agent_name", ""),
+                                m.get("timestamp", now),
+                            )
+                            for m in new_slice
+                        ],
+                    )
+            elif db_count == 0:
+                # Brand new session: insert all messages in bulk
+                if messages:
+                    conn.executemany(
+                        "INSERT INTO messages (session_id, role, content, agent_name, timestamp) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        [
+                            (
+                                session_id,
+                                m["role"],
+                                m["content"],
+                                m.get("agent_name", ""),
+                                m.get("timestamp", now),
+                            )
+                            for m in messages
+                        ],
+                    )
+            else:
+                # History diverged or session was cleared/rolled back (Audit #31)
+                conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+                if messages:
+                    conn.executemany(
+                        "INSERT INTO messages (session_id, role, content, agent_name, timestamp) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        [
+                            (
+                                session_id,
+                                m["role"],
+                                m["content"],
+                                m.get("agent_name", ""),
+                                m.get("timestamp", now),
+                            )
+                            for m in messages
+                        ],
+                    )
+
             conn.commit()
-            logger.debug(f"Saved session {session_id}: {len(messages)} messages")
+            logger.debug(f"Saved session {session_id}: {n_msgs} messages (db had {db_count}, incremental={is_incremental})")
 
             if tutor_context is not None:
                 self.save_tutor_context(session_id, tutor_context)
 
+    def append_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        agent_name: str = "",
+        timestamp: str | None = None,
+    ) -> int:
+        """Directly append a single message in O(1) to the session store (Audit #30)."""
+        session_id = validate_session_id(session_id)
+        with self._lock:
+            conn = self.conn
+            now = timestamp or datetime.now().isoformat()
+
+            # Ensure parent session record exists first to satisfy foreign keys
+            conn.execute(
+                """INSERT INTO sessions (id, title, created_at, updated_at, message_count)
+                   VALUES (?, ?, ?, ?, 0)
+                   ON CONFLICT(id) DO UPDATE SET
+                       title = CASE WHEN sessions.title IS NULL OR sessions.title = '' THEN excluded.title ELSE sessions.title END,
+                       updated_at = excluded.updated_at""",
+                (session_id, content[:80], now, now),
+            )
+
+            cursor = conn.execute(
+                "INSERT INTO messages (session_id, role, content, agent_name, timestamp) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (session_id, role, content, agent_name, now),
+            )
+            msg_id = cursor.lastrowid
+
+            conn.execute(
+                "UPDATE sessions SET message_count = message_count + 1 WHERE id = ?",
+                (session_id,),
+            )
+            conn.commit()
+            return msg_id
+
+    def clear_session_messages(self, session_id: str) -> None:
+        """Clear all messages and tutor context for a session while retaining session entry (Audit #31)."""
+        session_id = validate_session_id(session_id)
+        with self._lock:
+            conn = self.conn
+            now = datetime.now().isoformat()
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM tutor_contexts WHERE session_id = ?", (session_id,))
+            conn.execute(
+                "UPDATE sessions SET message_count = 0, title = '', updated_at = ? WHERE id = ?",
+                (now, session_id),
+            )
+            conn.commit()
+            logger.info(f"Cleared messages for session: {session_id}")
+
     def save_tutor_context(self, session_id: str, ctx: Any) -> None:
         """Save tutor teaching state for a session."""
+        session_id = validate_session_id(session_id)
         if not ctx:
             return
         with self._lock:
@@ -187,6 +323,7 @@ class SessionStore:
 
     def load_tutor_context(self, session_id: str) -> Any:
         """Load tutor context for a session."""
+        session_id = validate_session_id(session_id)
         with self._lock:
             conn = self.conn
             row = conn.execute(
@@ -223,6 +360,7 @@ class SessionStore:
         Returns:
             List of message dicts {role, content, agent_name, timestamp}
         """
+        session_id = validate_session_id(session_id)
         with self._lock:
             conn = self.conn
             cursor = conn.execute(
@@ -244,7 +382,7 @@ class SessionStore:
         """List all sessions ordered by most recent first.
 
         Returns:
-            List of {id, title, created_at, updated_at, message_count}
+            List of {id, title, created_at, updated_at, message_count, preview}
         """
         with self._lock:
             conn = self.conn
@@ -255,16 +393,18 @@ class SessionStore:
             return [
                 {
                     "id": row["id"],
-                    "title": row["title"],
+                    "title": row["title"] or row["id"][:20],
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
                     "message_count": row["message_count"],
+                    "preview": row["title"] or "",
                 }
                 for row in cursor.fetchall()
             ]
 
     def delete_session(self, session_id: str) -> None:
         """Delete a session, its messages, and its tutor context."""
+        session_id = validate_session_id(session_id)
         with self._lock:
             conn = self.conn
             conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
