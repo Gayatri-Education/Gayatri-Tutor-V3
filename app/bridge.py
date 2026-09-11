@@ -116,6 +116,7 @@ class Bridge(QObject):
                 if is_done:
                     self._save_current_session()
                     self.done.emit()
+                    return
                 elif token:
                     self.token.emit(0, token)
         except Exception as exc:
