@@ -56,22 +56,22 @@ if errorlevel 1 (
 
 
 REM Check if llama-cpp-python installed after requirements
-.venv\Scripts\python.exe -c "import llama_cpp; print('ok')" 2>nul
-if errorlevel 1 (
+.venv\Scripts\python.exe -c "import llama_cpp" >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo [OK] llama-cpp-python is installed and working
+    goto :after_install
+)
+
+echo.
+echo       llama-cpp-python not functional. Running installer...
+echo       (Requires Visual Studio Build Tools)
+echo.
+.venv\Scripts\python.exe install_llama.py
+if %ERRORLEVEL% neq 0 (
     echo.
-    echo       llama-cpp-python needs compilation. Running installer...
-    echo       (Requires Visual Studio Build Tools - takes 5-10 min)
-    echo.
-    .venv\Scripts\python.exe install_llama.py
-    if errorlevel 1 (
-        echo.
-        echo [ERROR] llama-cpp-python installation failed.
-        echo       Install Visual Studio Build Tools manually:
-        echo       https://visualstudio.microsoft.com/downloads/
-        echo       Select "Desktop development with C++" workload.
-        pause
-        exit /b 1
-    )
+    echo [WARN] llama-cpp-python could not be compiled.
+    echo        Gayatri AI will run in Cloud/Setup mode without local GPU inference.
+    echo        You can use Cloud providers (Gemini, Anthropic, OpenAI).
 )
 
 :after_install
