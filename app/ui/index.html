@@ -225,9 +225,9 @@
       <div class="titlebar">
         <span class="titlebar-text">Gayatri AI — Local Mode</span>
         <div class="titlebar-controls">
-          <button class="titlebar-btn btn-minimize"></button>
-          <button class="titlebar-btn btn-maximize"></button>
-          <button class="titlebar-btn btn-close"></button>
+          <button class="titlebar-btn btn-minimize" onclick="minimizeWindow()" title="Minimize"></button>
+          <button class="titlebar-btn btn-maximize" onclick="maximizeWindow()" title="Maximize / Restore"></button>
+          <button class="titlebar-btn btn-close" onclick="closeWindow()" title="Close"></button>
         </div>
       </div>
 
@@ -371,6 +371,25 @@
         b.classList.remove('active');
       });
       event.target.classList.add('active');
+    }
+
+    // ── Window Controls (Frameless UI) ──
+    function minimizeWindow() {
+      if (bridge && typeof bridge.minimize_window === 'function') {
+        bridge.minimize_window();
+      }
+    }
+
+    function maximizeWindow() {
+      if (bridge && typeof bridge.maximize_window === 'function') {
+        bridge.maximize_window();
+      }
+    }
+
+    function closeWindow() {
+      if (bridge && typeof bridge.close_window === 'function') {
+        bridge.close_window();
+      }
     }
 
     // Focus input on load

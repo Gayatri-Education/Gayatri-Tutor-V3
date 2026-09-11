@@ -10,6 +10,7 @@ import threading
 
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QApplication, QMainWindow
 
 from core.logging_setup import setup_logging
 from core.model_fetch.ollama_pull import OllamaPullError
@@ -34,6 +35,7 @@ class Bridge(QObject):
         import uuid
         super().__init__(parent)
         self._view: QWebEngineView | None = None
+        self._window: QMainWindow | None = None
         self._orchestrator = None
         self._generation_active = False
         self._session_id = str(uuid.uuid4())
@@ -68,6 +70,34 @@ class Bridge(QObject):
 
     def set_view(self, view: QWebEngineView):
         self._view = view
+
+    def set_window(self, window: QMainWindow):
+        self._window = window
+
+    # ── Window Controls (Frameless UI) ──────────────────────────────────
+
+    @Slot()
+    def minimize_window(self):
+        """Minimize the desktop window."""
+        if self._window:
+            self._window.showMinimized()
+
+    @Slot()
+    def maximize_window(self):
+        """Toggle maximize / restore the desktop window."""
+        if self._window:
+            if self._window.isMaximized():
+                self._window.showNormal()
+            else:
+                self._window.showMaximized()
+
+    @Slot()
+    def close_window(self):
+        """Close the desktop window."""
+        if self._window:
+            self._window.close()
+        else:
+            QApplication.quit()
 
     # ── Slots (callable from JavaScript) ────────────────────────────────
 
