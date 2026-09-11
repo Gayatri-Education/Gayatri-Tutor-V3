@@ -246,13 +246,13 @@ class LearningDependencyGraph:
         """Record a student's attempt on a concept and update mastery.
 
         Mastery update (exponential moving average):
-          correct: mastery += LEARN_RATE * (1 - mastery)
-          wrong:   mastery -= DECAY_RATE * mastery
+          correct: mastery += LEARN_RATE * (1 - mastery) * confidence
+          wrong:   mastery -= DECAY_RATE * mastery * confidence
 
         Args:
             concept_id: The concept being attempted
             correct: Whether the student answered correctly
-            confidence: How confident the assessment is (0.0-1.0)
+            confidence: How confident the assessment is (clamped to 0.0-1.0)
 
         Returns:
             New mastery score
@@ -261,15 +261,28 @@ class LearningDependencyGraph:
         if concept is None:
             raise ValueError(f"Concept not found: {concept_id}")
 
-        if correct:
+        # Clamp confidence to [0.0, 1.0] (Audit #35)
+        try:
+            conf = max(0.0, min(1.0, float(confidence)))
+        except (TypeError, ValueError):
+            conf = 1.0
+
+        if conf == 0.0:
+            # Zero confidence: do not adjust mastery or exposure count
+            return concept.mastery
+        elif correct:
             # Learn: move mastery toward 1.0
-            delta = LDG_LEARN_RATE * (1.0 - concept.mastery) * confidence
+            # Apply slight diminishing return with exposure to prevent oscillation (Audit #36)
+            dampening = 1.0 / (1.0 + 0.02 * min(concept.exposure_count, 50))
+            delta = LDG_LEARN_RATE * (1.0 - concept.mastery) * conf * dampening
             new_mastery = min(1.0, concept.mastery + delta)
         else:
             # Decay: move mastery toward 0.0
-            delta = LDG_DECAY_RATE * concept.mastery * confidence
+            dampening = 1.0 / (1.0 + 0.02 * min(concept.exposure_count, 50))
+            delta = LDG_DECAY_RATE * concept.mastery * conf * dampening
             new_mastery = max(0.0, concept.mastery - delta)
 
+        new_mastery = round(new_mastery, 4)
         old_mastery = concept.mastery
         concept.mastery = new_mastery
 
@@ -291,26 +304,61 @@ class LearningDependencyGraph:
         conn.close()
 
         logger.info(
-            f"Attempt {concept_id}: correct={correct}, mastery={concept.mastery:.3f} "
-            f"(was {old_mastery:.3f})"
+            f"Attempt {concept_id}: correct={correct}, conf={conf:.2f}, "
+            f"mastery={concept.mastery:.3f} (was {old_mastery:.3f})"
         )
         return concept.mastery
 
-    def get_mastery(self, concept_id: str) -> float:
-        """Get current mastery score for a concept (0.0-1.0)."""
+    def get_mastery(self, concept_id: str, default: float | None = None) -> float | None:
+        """Get current mastery score for a concept (0.0-1.0), or default (None) if untracked."""
         concept = self.get_concept(concept_id)
-        return concept.mastery if concept else 0.0
+        if concept is None:
+            return default
+        return float(concept.mastery)
+
+    def has_concept(self, concept_id: str) -> bool:
+        """Check if a concept exists in the graph."""
+        return self.get_concept(concept_id) is not None
 
     def is_unlocked(self, concept_id: str) -> bool:
         """Check if all prerequisites are mastered (>= threshold).
 
-        A concept is unlocked when every prerequisite has mastery >= threshold.
+        A concept is unlocked when every existing prerequisite has mastery >= threshold.
         If no prerequisites exist, the concept is always unlocked.
+        Missing/orphaned prerequisites are logged and skipped to prevent deadlock (Audit #110).
         """
         prereqs = self.get_prerequisites(concept_id)
         if not prereqs:
             return True
-        return all(self.get_mastery(p) >= LDG_MASTERY_THRESHOLD for p in prereqs)
+        for p in prereqs:
+            mastery = self.get_mastery(p)
+            if mastery is None:
+                logger.warning(
+                    f"Concept '{concept_id}' depends on missing prerequisite '{p}'. "
+                    "Skipping missing prerequisite to prevent curriculum deadlock."
+                )
+                continue
+            if mastery < LDG_MASTERY_THRESHOLD:
+                return False
+        return True
+
+    def prune_orphaned_prerequisites(self) -> int:
+        """Remove any prerequisite edges referencing non-existent concepts.
+
+        Returns the number of removed orphaned edges (Audit #110).
+        """
+        conn = self._conn()
+        cursor = conn.execute(
+            """DELETE FROM ldg_prerequisites
+               WHERE concept_id NOT IN (SELECT id FROM ldg_concepts)
+                  OR prereq_id NOT IN (SELECT id FROM ldg_concepts)"""
+        )
+        removed = cursor.rowcount
+        conn.commit()
+        conn.close()
+        if removed > 0:
+            logger.info(f"Pruned {removed} orphaned prerequisite edges.")
+        return removed
 
     # ── Learning path ────────────────────────────────────────────────────
 
@@ -323,11 +371,8 @@ class LearningDependencyGraph:
           3. Lowest difficulty (easier to start)
           4. Least recently practiced
 
-        Args:
-            subject: Optional subject filter
-
-        Returns:
-            The best next concept, or None if graph is empty
+        If no concept is directly unlocked, falls back to the candidate whose
+        prerequisites are closest to mastery (Audit #109).
         """
         candidates = self.list_concepts(subject=subject)
         if not candidates:
@@ -335,9 +380,22 @@ class LearningDependencyGraph:
 
         unlocked = [c for c in candidates if self.is_unlocked(c.id)]
         if not unlocked:
-            # Nothing unlocked — find the concept whose prereqs are closest to mastery
-            logger.warning("No concepts unlocked — all prerequisites not yet mastered")
-            return None
+            logger.warning(
+                f"No concepts directly unlocked for subject='{subject}'. "
+                "Selecting candidate closest to unlocking."
+            )
+            # Fallback: score candidates by how close their prerequisites are to mastery
+            def _prereq_mastery_score(cand: Concept) -> tuple[float, float]:
+                prereqs = self.get_prerequisites(cand.id)
+                existing_prereqs = [p for p in prereqs if self.has_concept(p)]
+                if not existing_prereqs:
+                    return (1.0, -cand.difficulty)
+                scores = [self.get_mastery(p) or 0.0 for p in existing_prereqs]
+                avg_m = sum(scores) / len(scores)
+                return (avg_m, -cand.difficulty)
+
+            candidates.sort(key=_prereq_mastery_score, reverse=True)
+            return candidates[0]
 
         # Sort: lowest mastery first, then lowest difficulty, then oldest practice
         unlocked.sort(key=lambda c: (
@@ -350,8 +408,8 @@ class LearningDependencyGraph:
     def get_learning_path(self, goal_concept: str) -> list[Concept]:
         """Get the full learning path from roots to a goal concept.
 
-        Uses topological sort on prerequisite edges.
-        Returns concepts in the order they should be learned.
+        Uses topological sort on prerequisite edges with cycle detection
+        and graceful fallback resolution (Audit #33 & #110).
 
         Args:
             goal_concept: Target concept ID
@@ -359,25 +417,32 @@ class LearningDependencyGraph:
         Returns:
             Ordered list of concepts from prerequisites to goal
         """
-        # Build adjacency: prereq → [dependents]
         all_concepts = {c.id: c for c in self.list_concepts()}
         if goal_concept not in all_concepts:
             return []
 
-        # Topological sort (Kahn's algorithm) limited to ancestors of goal
-        # Collect all ancestors of goal
+        # Collect all ancestors of goal using BFS with visited set
         ancestors = set()
         queue = [goal_concept]
+        visited_bfs = {goal_concept}
+
         while queue:
             current = queue.pop(0)
             prereqs = self.get_prerequisites(current)
             for p in prereqs:
+                if p not in all_concepts:
+                    # Audit #110: Skip missing prerequisites
+                    logger.warning(
+                        f"Missing prerequisite '{p}' ignored in learning path for '{goal_concept}'"
+                    )
+                    continue
                 if p not in ancestors:
                     ancestors.add(p)
+                if p not in visited_bfs:
+                    visited_bfs.add(p)
                     queue.append(p)
 
-        # Sort ancestors by dependency order (no cycles in valid curriculum)
-        # Kahn's algorithm on the subgraph
+        # Kahn's algorithm on the ancestor subgraph
         in_degree = {cid: 0 for cid in ancestors}
         dependents: dict[str, list[str]] = {cid: [] for cid in ancestors}
 
@@ -388,16 +453,37 @@ class LearningDependencyGraph:
                     dependents[prereq].append(cid)
 
         # BFS topological sort
-        queue = [cid for cid in ancestors if in_degree[cid] == 0]
+        ready_queue = [cid for cid in ancestors if in_degree[cid] == 0]
         sorted_ancestors = []
-        while queue:
-            queue.sort()  # deterministic order
-            node = queue.pop(0)
+
+        while ready_queue:
+            ready_queue.sort()  # deterministic order
+            node = ready_queue.pop(0)
             sorted_ancestors.append(node)
             for dep in dependents.get(node, []):
                 in_degree[dep] -= 1
                 if in_degree[dep] == 0:
-                    queue.append(dep)
+                    ready_queue.append(dep)
+
+        # Audit #33: Cycle detection & graceful fallback
+        if len(sorted_ancestors) < len(ancestors):
+            remaining = [cid for cid in ancestors if cid not in sorted_ancestors]
+            logger.warning(
+                f"Curriculum cycle detected in learning path for '{goal_concept}'. "
+                f"Unresolved cycle nodes: {remaining}. Resolving with fallback topological ordering."
+            )
+            # Break cycle gracefully by sorting remaining nodes by (in_degree, difficulty, concept_id)
+            while remaining:
+                remaining.sort(key=lambda cid: (
+                    in_degree.get(cid, 0),
+                    all_concepts[cid].difficulty if cid in all_concepts else 0.5,
+                    cid
+                ))
+                break_node = remaining.pop(0)
+                sorted_ancestors.append(break_node)
+                for dep in dependents.get(break_node, []):
+                    if dep in in_degree:
+                        in_degree[dep] = max(0, in_degree[dep] - 1)
 
         # Add the goal concept at the end if not already included
         if goal_concept not in sorted_ancestors:
@@ -434,8 +520,14 @@ class LearningDependencyGraph:
         """Get overall progress statistics for a subject."""
         concepts = self.list_concepts(subject=subject)
         if not concepts:
-            return {"total": 0, "mastered": 0, "in_progress": 0, "not_started": 0,
-                    "avg_mastery": 0.0}
+            return {
+                "total": 0,
+                "mastered": 0,
+                "in_progress": 0,
+                "not_started": 0,
+                "avg_mastery": 0.0,
+                "mastery_pct": 0.0,
+            }
 
         mastered = sum(1 for c in concepts if c.mastery >= LDG_MASTERY_THRESHOLD)
         in_progress = sum(1 for c in concepts if 0.0 < c.mastery < LDG_MASTERY_THRESHOLD)

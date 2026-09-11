@@ -329,7 +329,7 @@ class SessionStore:
             row = conn.execute(
                 """SELECT current_concept_id, current_concept_name, concept_description,
                           subject, mastery, waiting_for_answer, last_response_type,
-                          last_attempt_correct
+                          last_attempt_correct, updated_at
                    FROM tutor_contexts WHERE session_id = ?""",
                 (session_id,),
             ).fetchone()
@@ -343,6 +343,13 @@ class SessionStore:
             elif row["last_attempt_correct"] == 0:
                 last_correct = False
 
+            last_interaction = 0.0
+            if "updated_at" in row.keys() and row["updated_at"]:
+                try:
+                    last_interaction = datetime.fromisoformat(row["updated_at"]).timestamp()
+                except Exception:
+                    pass
+
             return TutorContext(
                 current_concept_id=row["current_concept_id"] or "",
                 current_concept_name=row["current_concept_name"] or "",
@@ -352,6 +359,7 @@ class SessionStore:
                 waiting_for_answer=bool(row["waiting_for_answer"]),
                 last_response_type=row["last_response_type"] or "explain",
                 last_attempt_correct=last_correct,
+                last_interaction_time=last_interaction,
             )
 
     def load_session(self, session_id: str) -> list[dict]:

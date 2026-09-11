@@ -7,8 +7,10 @@ No patented learning methods implemented.
 
 from __future__ import annotations
 
+import copy
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,6 +28,8 @@ class TutorContext:
     waiting_for_answer: bool = False
     last_response_type: str = "explain"  # explain, question, practice, feedback
     last_attempt_correct: bool | None = None
+    last_interaction_time: float = 0.0
+    last_student_answer: str = ""
 
     def to_prompt_context(self) -> str:
         """Build a context string for the model system prompt."""
@@ -46,6 +50,67 @@ class TutorContext:
             lines.append("Evaluate the student's answer. If correct, praise and move on. If wrong, gently correct and re-explain.")
 
         return "\n".join(lines)
+
+
+@dataclass
+class TutorTurnTransaction:
+    """Manages transactional state changes during a tutor turn (Audit #128).
+
+    If a turn fails (e.g. MODEL_UNAVAILABLE, streaming crash, network error),
+    all LDG concept updates and TutorContext mutations are rolled back cleanly.
+    """
+    engine: TutorEngine
+    session_id: str
+    orig_context: TutorContext
+    orig_concept_state: dict | None = None
+    committed: bool = False
+    rolled_back: bool = False
+
+    def commit(self) -> None:
+        """Commit transaction and persist current state to SQLite."""
+        if self.rolled_back:
+            raise RuntimeError("Cannot commit a rolled-back tutor transaction")
+        self.committed = True
+        self.engine.save_context(self.session_id)
+        logger.debug(f"Tutor transaction committed for session {self.session_id}")
+
+    def rollback(self) -> None:
+        """Roll back in-memory and persisted state to the pre-turn snapshot."""
+        if self.committed:
+            return
+        self.rolled_back = True
+        with self.engine._lock:
+            # 1. Restore TutorContext in-place and in dict
+            current_ctx = self.engine.session_contexts.get(self.session_id)
+            if current_ctx is not None:
+                current_ctx.__dict__.clear()
+                current_ctx.__dict__.update(copy.deepcopy(self.orig_context).__dict__)
+            else:
+                self.engine.session_contexts[self.session_id] = copy.deepcopy(self.orig_context)
+            self.engine.save_context(self.session_id)
+
+            # 2. Restore LDG concept state in SQLite if modified
+            if self.orig_concept_state and hasattr(self.engine.ldg, "_conn"):
+                try:
+                    conn = self.engine.ldg._conn()
+                    conn.execute(
+                        """UPDATE ldg_concepts
+                           SET mastery = ?, exposure_count = ?, error_count = ?, last_practiced = ?
+                           WHERE id = ?""",
+                        (
+                            self.orig_concept_state["mastery"],
+                            self.orig_concept_state["exposure_count"],
+                            self.orig_concept_state["error_count"],
+                            self.orig_concept_state["last_practiced"],
+                            self.orig_concept_state["id"],
+                        ),
+                    )
+                    conn.commit()
+                    conn.close()
+                except Exception as exc:
+                    logger.error(f"Failed to rollback LDG concept in SQLite: {exc}")
+
+            logger.info(f"Tutor turn transaction rolled back for session {self.session_id}")
 
 
 class TutorEngine:
@@ -97,6 +162,29 @@ class TutorEngine:
         with self._lock:
             self.session_contexts.pop(session_id, None)
 
+    def begin_transaction(self, session_id: str) -> TutorTurnTransaction:
+        """Begin a transactional turn, capturing snapshots of tutor context and concept state (Audit #128)."""
+        with self._lock:
+            ctx = self.get_or_create_context(session_id)
+            orig_ctx = copy.deepcopy(ctx)
+            orig_concept_state = None
+            if ctx.current_concept_id and hasattr(self.ldg, "get_concept"):
+                c = self.ldg.get_concept(ctx.current_concept_id)
+                if c:
+                    orig_concept_state = {
+                        "id": c.id,
+                        "mastery": c.mastery,
+                        "exposure_count": c.exposure_count,
+                        "error_count": c.error_count,
+                        "last_practiced": c.last_practiced,
+                    }
+            return TutorTurnTransaction(
+                engine=self,
+                session_id=session_id,
+                orig_context=orig_ctx,
+                orig_concept_state=orig_concept_state,
+            )
+
     def get_next_concept_for_session(self, session_id: str) -> Any:
         """Get the next concept to teach, advancing from current if mastered."""
         with self._lock:
@@ -104,15 +192,16 @@ class TutorEngine:
             current_id = ctx.current_concept_id
 
             from core.config import LDG_MASTERY_THRESHOLD
-            # If no current concept, or current is mastered, get next
-            if not current_id or self.ldg.get_mastery(current_id) >= LDG_MASTERY_THRESHOLD:
+            # If no current concept, or current is mastered or missing, get next
+            mastery = self.ldg.get_mastery(current_id) if current_id else None
+            if not current_id or mastery is None or mastery >= LDG_MASTERY_THRESHOLD:
                 next_concept = self.ldg.get_next_concept(ctx.subject)
                 if next_concept:
                     # Advance context
                     ctx.current_concept_id = next_concept.id
                     ctx.current_concept_name = next_concept.name
                     ctx.concept_description = next_concept.description
-                    ctx.mastery = self.ldg.get_mastery(next_concept.id)
+                    ctx.mastery = self.ldg.get_mastery(next_concept.id) or 0.3
                     ctx.waiting_for_answer = False
                     ctx.last_response_type = "explain"
                     self.save_context(session_id)
@@ -121,12 +210,21 @@ class TutorEngine:
             return self.ldg.get_concept(ctx.current_concept_id) if ctx.current_concept_id else None
 
     def record_student_response(self, session_id: str, correct: bool | None,
-                                confidence: float = 1.0) -> float:
+                                confidence: float = 1.0,
+                                student_answer: str = "") -> float:
         """Record a student's answer and update mastery."""
         with self._lock:
             ctx = self.get_or_create_context(session_id)
             if not ctx.current_concept_id:
                 return 0.0
+
+            # Audit #36: Check for duplicate identical submission within short window
+            now = time.time()
+            clean_answer = student_answer.strip().lower()
+            if clean_answer and clean_answer == ctx.last_student_answer.strip().lower():
+                if ctx.last_interaction_time > 0 and (now - ctx.last_interaction_time) < 10.0:
+                    logger.info(f"Duplicate answer detected within 10s on session {session_id}; skipping re-assessment")
+                    return ctx.mastery
 
             if correct is not None:
                 new_mastery = self.ldg.record_attempt(ctx.current_concept_id, correct, confidence)
@@ -146,6 +244,8 @@ class TutorEngine:
             ctx.last_response_type = "feedback" if ctx.waiting_for_answer else "explain"
             ctx.last_attempt_correct = correct
             ctx.waiting_for_answer = False
+            ctx.last_student_answer = student_answer
+            ctx.last_interaction_time = now
             self.save_context(session_id)
 
             return new_mastery
@@ -156,13 +256,24 @@ class TutorEngine:
             ctx = self.get_or_create_context(session_id)
             ctx.waiting_for_answer = True
             ctx.last_response_type = "question"
+            ctx.last_interaction_time = time.time()
             self.save_context(session_id)
 
-    def is_waiting_for_answer(self, session_id: str) -> bool:
-        """Check if the tutor is waiting for a student answer."""
+    def is_waiting_for_answer(self, session_id: str, max_age_seconds: float = 1800.0) -> bool:
+        """Check if the tutor is waiting for a student answer (with staleness check, Audit #130)."""
         with self._lock:
             ctx = self.get_or_create_context(session_id)
-            return ctx.waiting_for_answer
+            if not ctx.waiting_for_answer:
+                return False
+            if ctx.last_interaction_time > 0 and (time.time() - ctx.last_interaction_time) > max_age_seconds:
+                logger.info(
+                    f"Tutor waiting_for_answer expired for session {session_id} "
+                    f"after {max_age_seconds}s staleness window"
+                )
+                ctx.waiting_for_answer = False
+                self.save_context(session_id)
+                return False
+            return True
 
     def get_session_summary(self, session_id: str) -> dict:
         """Get a summary of the current teaching session."""
