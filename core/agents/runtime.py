@@ -99,12 +99,14 @@ class ToolRegistry:
         # Enforce tool execution timeout (Audit #79)
         if spec.timeout_s and spec.timeout_s > 0:
             import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
                 future = executor.submit(spec.func, **kwargs)
-                try:
-                    return future.result(timeout=spec.timeout_s)
-                except concurrent.futures.TimeoutError as exc:
-                    raise TimeoutError(f"Tool '{name}' execution timed out after {spec.timeout_s}s") from exc
+                return future.result(timeout=spec.timeout_s)
+            except concurrent.futures.TimeoutError as exc:
+                raise TimeoutError(f"Tool '{name}' execution timed out after {spec.timeout_s}s") from exc
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
 
         return spec.func(**kwargs)
 
