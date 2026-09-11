@@ -14,6 +14,7 @@ from collections.abc import Iterator
 
 from core.providers.base import (
     Capability,
+    CatalogSource,
     ChatMessage,
     ChatOptions,
     ChatResponse,
@@ -67,6 +68,8 @@ class OpenAICompatibleProvider(LLMProvider):
         self._name = name
         self._key = key
         self._models: list[ModelInfo] | None = None
+        self._catalog_source: CatalogSource = CatalogSource.FALLBACK
+        self._is_reachable: bool = False
 
     @property
     def name(self) -> str:
@@ -76,6 +79,25 @@ class OpenAICompatibleProvider(LLMProvider):
     def key(self) -> str:
         return self._key
 
+    @property
+    def catalog_source(self) -> CatalogSource:
+        return self._catalog_source
+
+    @property
+    def is_authenticated(self) -> bool:
+        return bool(self._api_key and self._api_key.strip())
+
+    @property
+    def is_reachable(self) -> bool:
+        return self._is_reachable
+
+    def is_ready(self) -> bool:
+        return (
+            self.is_authenticated
+            and self._is_reachable
+            and len(self._models or []) > 0
+        )
+
     def _headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self._api_key}",
@@ -84,6 +106,10 @@ class OpenAICompatibleProvider(LLMProvider):
 
     def validate_key(self) -> tuple[bool, str]:
         """Validate key by fetching models list (cheap)."""
+        if not self.is_authenticated:
+            self._is_reachable = False
+            return False, "API key not configured"
+
         try:
             import httpx
             response = httpx.get(
@@ -92,15 +118,20 @@ class OpenAICompatibleProvider(LLMProvider):
                 timeout=10.0,
             )
             if response.status_code == 200:
+                self._is_reachable = True
                 return True, "OK"
             elif response.status_code == 401:
+                self._is_reachable = True
                 return False, "Invalid API key"
             else:
+                self._is_reachable = True
                 return False, f"HTTP {response.status_code}: {response.text[:200]}"
         except ImportError:
             return False, "httpx not installed"
         except Exception as exc:
-            return False, str(exc)[:200]
+            self._is_reachable = False
+            from core.errors import sanitize_message
+            return False, sanitize_message(str(exc))[:200]
 
     def _get_client(self):
         """Lazy import httpx."""
@@ -118,33 +149,42 @@ class OpenAICompatibleProvider(LLMProvider):
         httpx = self._get_client()
         models: list[ModelInfo] = []
 
-        try:
-            response = httpx.get(
-                f"{self._base_url}/models",
-                headers=self._headers(),
-                timeout=15.0,
-            )
-            if response.status_code == 200:
-                data = response.json()
-                for m in data.get("data", []):
-                    mid = m.get("id", "")
-                    known = _KNOWN_MODELS.get(mid, {})
-                    models.append(ModelInfo(
-                        id=mid,
-                        name=known.get("name", mid),
-                        provider=self._key,
-                        context_length=known.get("ctx", 4096),
-                        speed_tier=known.get("speed", SpeedTier.MEDIUM),
-                        capabilities=[Capability.CHAT, Capability.STREAM],
-                        supports_tools=known.get("tools", False),
-                        supports_vision=known.get("vision", False),
-                        supports_json=known.get("json", False),
-                    ))
-        except Exception as exc:
-            logger.error(f"Failed to fetch models: {exc}")
+        if self.is_authenticated:
+            try:
+                response = httpx.get(
+                    f"{self._base_url}/models",
+                    headers=self._headers(),
+                    timeout=15.0,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    for m in data.get("data", []):
+                        mid = m.get("id", "")
+                        known = _KNOWN_MODELS.get(mid, {})
+                        models.append(ModelInfo(
+                            id=mid,
+                            name=known.get("name", mid),
+                            provider=self._key,
+                            context_length=known.get("ctx", 4096),
+                            speed_tier=known.get("speed", SpeedTier.MEDIUM),
+                            capabilities=[Capability.CHAT, Capability.STREAM],
+                            supports_tools=known.get("tools", False),
+                            supports_vision=known.get("vision", False),
+                            supports_json=known.get("json", False),
+                            catalog_source=CatalogSource.LIVE,
+                        ))
+                    if models:
+                        self._catalog_source = CatalogSource.LIVE
+                        self._is_reachable = True
+                elif response.status_code == 401:
+                    self._is_reachable = True
+            except Exception as exc:
+                self._is_reachable = False
+                logger.error(f"Failed to fetch models: {exc}")
 
         # If API returned nothing, fall back to known models
         if not models:
+            self._catalog_source = CatalogSource.FALLBACK
             for mid, known in _KNOWN_MODELS.items():
                 if self._key in known.get("providers", []) or self._key == "openai":
                     models.append(ModelInfo(
@@ -157,6 +197,7 @@ class OpenAICompatibleProvider(LLMProvider):
                         supports_tools=known.get("tools", False),
                         supports_vision=known.get("vision", False),
                         supports_json=known.get("json", False),
+                        catalog_source=CatalogSource.FALLBACK,
                     ))
 
         self._models = models
@@ -184,9 +225,11 @@ class OpenAICompatibleProvider(LLMProvider):
         if opts.json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        # Use first available model if none specified
+        # Use requested model, first available, or default
         models = self.list_models()
-        if models:
+        if getattr(opts, "model", None):
+            payload["model"] = opts.model
+        elif models:
             payload["model"] = models[0].id
         else:
             payload["model"] = "gpt-4o-mini"
@@ -243,7 +286,9 @@ class OpenAICompatibleProvider(LLMProvider):
             payload["response_format"] = {"type": "json_object"}
 
         models = self.list_models()
-        if models:
+        if getattr(opts, "model", None):
+            payload["model"] = opts.model
+        elif models:
             payload["model"] = models[0].id
         else:
             payload["model"] = "gpt-4o-mini"

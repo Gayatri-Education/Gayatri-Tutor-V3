@@ -12,6 +12,7 @@ from typing import Any
 
 from core.providers.base import (
     Capability,
+    CatalogSource,
     ChatMessage,
     ChatOptions,
     ChatResponse,
@@ -23,11 +24,11 @@ from core.providers.base import (
 logger = logging.getLogger("gayatri.providers.google")
 
 _KNOWN_MODELS: dict[str, dict] = {
-    "gemini-2.0-flash": {"name": "Gemini 2.0 Flash", "ctx": 1000000, "speed": SpeedTier.FAST, "tools": True, "vision": True, "json": True},
-    "gemini-2.0-flash-lite": {"name": "Gemini 2.0 Flash Lite", "ctx": 1000000, "speed": SpeedTier.FAST, "tools": True, "vision": True, "json": True},
-    "gemini-1.5-pro": {"name": "Gemini 1.5 Pro", "ctx": 2000000, "speed": SpeedTier.MEDIUM, "tools": True, "vision": True, "json": True},
-    "gemini-1.5-flash": {"name": "Gemini 1.5 Flash", "ctx": 1000000, "speed": SpeedTier.FAST, "tools": True, "vision": True, "json": True},
-    "gemini-1.0-pro": {"name": "Gemini 1.0 Pro", "ctx": 32000, "speed": SpeedTier.MEDIUM, "tools": True, "vision": False, "json": True},
+    "gemini-2.0-flash": {"name": "Gemini 2.0 Flash", "ctx": 1000000, "speed": SpeedTier.FAST, "tools": False, "vision": True, "json": True},
+    "gemini-2.0-flash-lite": {"name": "Gemini 2.0 Flash Lite", "ctx": 1000000, "speed": SpeedTier.FAST, "tools": False, "vision": True, "json": True},
+    "gemini-1.5-pro": {"name": "Gemini 1.5 Pro", "ctx": 2000000, "speed": SpeedTier.MEDIUM, "tools": False, "vision": True, "json": True},
+    "gemini-1.5-flash": {"name": "Gemini 1.5 Flash", "ctx": 1000000, "speed": SpeedTier.FAST, "tools": False, "vision": True, "json": True},
+    "gemini-1.0-pro": {"name": "Gemini 1.0 Pro", "ctx": 32000, "speed": SpeedTier.MEDIUM, "tools": False, "vision": False, "json": True},
 }
 
 
@@ -42,6 +43,8 @@ class GoogleProvider(LLMProvider):
         self._name = "Google"
         self._key = "google"
         self._models: list[ModelInfo] | None = None
+        self._catalog_source: CatalogSource = CatalogSource.FALLBACK
+        self._is_reachable: bool = False
 
     @property
     def name(self) -> str:
@@ -51,11 +54,35 @@ class GoogleProvider(LLMProvider):
     def key(self) -> str:
         return self._key
 
+    @property
+    def catalog_source(self) -> CatalogSource:
+        return self._catalog_source
+
+    @property
+    def is_authenticated(self) -> bool:
+        return bool(self._api_key and self._api_key.strip())
+
+    @property
+    def is_reachable(self) -> bool:
+        return self._is_reachable
+
+    def is_ready(self) -> bool:
+        return (
+            self.is_authenticated
+            and self._is_reachable
+            and self._catalog_source == CatalogSource.LIVE
+            and len(self._models or []) > 0
+        )
+
     def _base_url(self) -> str:
         return "https://generativelanguage.googleapis.com/v1beta"
 
     def validate_key(self) -> tuple[bool, str]:
         """Validate key by calling list models endpoint."""
+        if not self.is_authenticated:
+            self._is_reachable = False
+            return False, "API key not configured"
+
         try:
             import httpx
             response = httpx.get(
@@ -64,14 +91,18 @@ class GoogleProvider(LLMProvider):
                 timeout=10.0,
             )
             if response.status_code == 200:
+                self._is_reachable = True
                 return True, "OK"
             elif response.status_code == 400:
+                self._is_reachable = True
                 return False, "Invalid API key"
             else:
+                self._is_reachable = True
                 return False, f"HTTP {response.status_code}"
         except ImportError:
             return False, "httpx not installed"
         except Exception as exc:
+            self._is_reachable = False
             from core.errors import sanitize_message
             return False, sanitize_message(str(exc))[:200]
 
@@ -81,36 +112,45 @@ class GoogleProvider(LLMProvider):
             return self._models
 
         self._models = []
-        try:
-            import httpx
-            response = httpx.get(
-                f"{self._base_url()}/models",
-                headers={"x-goog-api-key": self._api_key},
-                timeout=15.0,
-            )
-            if response.status_code == 200:
-                data = response.json()
-                for m in data.get("models", []):
-                    mid = m.get("name", "").replace("models/", "")
-                    if "gemini" not in mid.lower():
-                        continue
-                    known = _KNOWN_MODELS.get(mid, {})
-                    self._models.append(ModelInfo(
-                        id=mid,
-                        name=known.get("name", m.get("displayName", mid)),
-                        provider="google",
-                        context_length=known.get("ctx", 8192),
-                        speed_tier=known.get("speed", SpeedTier.MEDIUM),
-                        capabilities=[Capability.CHAT, Capability.STREAM, Capability.SYSTEM_PROMPT],
-                        supports_tools=known.get("tools", False),
-                        supports_vision=known.get("vision", False),
-                        supports_json=known.get("json", False),
-                    ))
-        except Exception as exc:
-            logger.error(f"Failed to fetch Google models: {exc}")
+        if self.is_authenticated:
+            try:
+                import httpx
+                response = httpx.get(
+                    f"{self._base_url()}/models",
+                    headers={"x-goog-api-key": self._api_key},
+                    timeout=15.0,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    for m in data.get("models", []):
+                        mid = m.get("name", "").replace("models/", "")
+                        if "gemini" not in mid.lower():
+                            continue
+                        known = _KNOWN_MODELS.get(mid, {})
+                        self._models.append(ModelInfo(
+                            id=mid,
+                            name=known.get("name", m.get("displayName", mid)),
+                            provider="google",
+                            context_length=known.get("ctx", 8192),
+                            speed_tier=known.get("speed", SpeedTier.MEDIUM),
+                            capabilities=[Capability.CHAT, Capability.STREAM, Capability.SYSTEM_PROMPT],
+                            supports_tools=False,
+                            supports_vision=known.get("vision", False),
+                            supports_json=known.get("json", False),
+                            catalog_source=CatalogSource.LIVE,
+                        ))
+                    if self._models:
+                        self._catalog_source = CatalogSource.LIVE
+                        self._is_reachable = True
+                elif response.status_code == 400:
+                    self._is_reachable = True
+            except Exception as exc:
+                self._is_reachable = False
+                logger.error(f"Failed to fetch Google models: {exc}")
 
-        # Fallback to known models
+        # Fallback to known models if live fetch returned nothing
         if not self._models:
+            self._catalog_source = CatalogSource.FALLBACK
             for mid, meta in _KNOWN_MODELS.items():
                 self._models.append(ModelInfo(
                     id=mid,
@@ -119,9 +159,10 @@ class GoogleProvider(LLMProvider):
                     context_length=meta.get("ctx", 8192),
                     speed_tier=meta.get("speed", SpeedTier.MEDIUM),
                     capabilities=[Capability.CHAT, Capability.STREAM, Capability.SYSTEM_PROMPT],
-                    supports_tools=meta.get("tools", False),
+                    supports_tools=False,
                     supports_vision=meta.get("vision", False),
                     supports_json=meta.get("json", False),
+                    catalog_source=CatalogSource.FALLBACK,
                 ))
 
         return self._models
@@ -161,7 +202,7 @@ class GoogleProvider(LLMProvider):
 
         system_prompt, contents = self._convert_messages(messages)
         models = self.list_models()
-        model_id = models[0].id if models else "gemini-1.5-flash"
+        model_id = getattr(opts, "model", None) or (models[0].id if models else "gemini-1.5-flash")
 
         payload: dict[str, Any] = {
             "contents": contents,
@@ -221,7 +262,7 @@ class GoogleProvider(LLMProvider):
 
         system_prompt, contents = self._convert_messages(messages)
         models = self.list_models()
-        model_id = models[0].id if models else "gemini-1.5-flash"
+        model_id = getattr(opts, "model", None) or (models[0].id if models else "gemini-1.5-flash")
 
         payload: dict[str, Any] = {
             "contents": contents,
@@ -267,7 +308,7 @@ class GoogleProvider(LLMProvider):
             raise RuntimeError(f"Google stream failed: {clean_msg}") from exc
 
     def supports_tools(self) -> bool:
-        return True
+        return False
 
     def supports_vision(self) -> bool:
         return True

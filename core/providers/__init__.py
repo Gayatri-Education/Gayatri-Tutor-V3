@@ -3,6 +3,7 @@
 from core.providers.anthropic import AnthropicProvider
 from core.providers.base import (
     Capability,
+    CatalogSource,
     ChatMessage,
     ChatOptions,
     ChatResponse,
@@ -11,14 +12,14 @@ from core.providers.base import (
     SpeedTier,
 )
 from core.providers.google import GoogleProvider
-from core.providers.local import LocalModelError, LocalProvider, format_gemma_prompt
+from core.providers.local import LocalLLMProvider, LocalModelError, LocalProvider, format_gemma_prompt
 from core.providers.openai_compat import OpenAICompatibleProvider
 
 __all__ = [
     # Base
     "LLMProvider", "ModelInfo", "ChatMessage", "ChatOptions", "ChatResponse",
-    "SpeedTier", "Capability",
+    "SpeedTier", "Capability", "CatalogSource",
     # Providers
-    "LocalProvider", "LocalModelError", "format_gemma_prompt",
+    "LocalProvider", "LocalLLMProvider", "LocalModelError", "format_gemma_prompt",
     "OpenAICompatibleProvider", "AnthropicProvider", "GoogleProvider",
 ]

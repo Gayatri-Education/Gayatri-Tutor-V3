@@ -6,6 +6,8 @@ import logging
 import threading
 import time
 
+from collections.abc import Iterator
+
 from core.config import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
@@ -15,6 +17,16 @@ from core.config import (
     LOCAL_MODEL_DIR,
     LOCAL_MODEL_FILE,
     LOCAL_MODEL_GPU_LAYERS,
+)
+from core.providers.base import (
+    Capability,
+    CatalogSource,
+    ChatMessage,
+    ChatOptions,
+    ChatResponse,
+    LLMProvider,
+    ModelInfo,
+    SpeedTier,
 )
 
 logger = logging.getLogger("gayatri.providers.local")
@@ -273,3 +285,91 @@ class LocalProvider:
         """Unload the model (for testing or reload)."""
         with cls._model_lock:
             cls._model = None
+
+
+class LocalLLMProvider(LLMProvider):
+    """Adapter exposing LocalProvider (GGUF via llama-cpp-python) as an LLMProvider."""
+
+    def __init__(self):
+        self._name = "Local (GGUF)"
+        self._key = "local"
+        self._models: list[ModelInfo] | None = None
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def key(self) -> str:
+        return self._key
+
+    @property
+    def is_local(self) -> bool:
+        return True
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def is_reachable(self) -> bool:
+        return True
+
+    def is_ready(self) -> bool:
+        return LocalProvider.is_available()
+
+    def validate_key(self) -> tuple[bool, str]:
+        if LocalProvider.is_available():
+            return True, "OK"
+        return False, "Local model file not installed"
+
+    def list_models(self) -> list[ModelInfo]:
+        from core.config import LOCAL_MODEL_FILE
+        is_avail = LocalProvider.is_available()
+        return [
+            ModelInfo(
+                id="local",
+                name=f"Local Model ({LOCAL_MODEL_FILE})",
+                provider="local",
+                context_length=8192,
+                speed_tier=SpeedTier.SLOW,
+                capabilities=[Capability.CHAT, Capability.STREAM, Capability.SYSTEM_PROMPT],
+                supports_tools=False,
+                supports_vision=False,
+                supports_json=False,
+                catalog_source=CatalogSource.LIVE if is_avail else CatalogSource.FALLBACK,
+            )
+        ]
+
+    def chat(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> ChatResponse:
+        opts = options or ChatOptions()
+        start = time.time()
+        dict_msgs = [m.to_dict() for m in messages]
+        text = LocalProvider.chat(
+            dict_msgs,
+            max_tokens=opts.max_tokens,
+            temperature=opts.temperature,
+            top_p=opts.top_p,
+            top_k=opts.top_k,
+            stop=opts.stop or None,
+        )
+        latency = (time.time() - start) * 1000
+        return ChatResponse(
+            text=text,
+            model_id="local",
+            provider="local",
+            tokens_used=len(text) // 4,
+            latency_ms=round(latency, 1),
+        )
+
+    def stream(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> Iterator[str]:
+        opts = options or ChatOptions()
+        dict_msgs = [m.to_dict() for m in messages]
+        yield from LocalProvider.chat_stream(
+            dict_msgs,
+            max_tokens=opts.max_tokens,
+            temperature=opts.temperature,
+            top_p=opts.top_p,
+            top_k=opts.top_k,
+            stop=opts.stop or None,
+        )

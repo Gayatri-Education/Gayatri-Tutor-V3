@@ -33,6 +33,12 @@ class Capability(str, Enum):
     LONG_CONTEXT = "long_context"
 
 
+class CatalogSource(str, Enum):
+    """Source of model metadata catalog."""
+    LIVE = "live"          # Fetched directly from the provider API
+    FALLBACK = "fallback"  # Static fallback / offline knowledge base
+
+
 @dataclass
 class ModelInfo:
     """Normalized model metadata for the unified catalog."""
@@ -47,6 +53,7 @@ class ModelInfo:
     supports_tools: bool = False
     supports_vision: bool = False
     supports_json: bool = False
+    catalog_source: CatalogSource = CatalogSource.FALLBACK
 
     def to_dict(self) -> dict:
         return {
@@ -61,6 +68,7 @@ class ModelInfo:
             "supports_tools": self.supports_tools,
             "supports_vision": self.supports_vision,
             "supports_json": self.supports_json,
+            "catalog_source": self.catalog_source.value if isinstance(self.catalog_source, CatalogSource) else str(self.catalog_source),
         }
 
 
@@ -84,6 +92,7 @@ class ChatMessage:
 @dataclass
 class ChatOptions:
     """Options for a chat completion request."""
+    model: str | None = None
     temperature: float = 0.7
     max_tokens: int = 512
     top_p: float = 0.9
@@ -169,6 +178,31 @@ class LLMProvider(ABC):
     def is_local(self) -> bool:
         """Whether this provider executes purely locally on-device."""
         return self.key == "local"
+
+    @property
+    def catalog_source(self) -> CatalogSource:
+        """Whether this provider's catalog was obtained from live API or fallback."""
+        return getattr(self, "_catalog_source", CatalogSource.FALLBACK)
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Whether valid credentials/keys are configured for this provider."""
+        if self.is_local:
+            return True
+        key = getattr(self, "_api_key", None)
+        return bool(key and str(key).strip())
+
+    @property
+    def is_reachable(self) -> bool:
+        """Whether the provider API endpoint is reachable."""
+        return getattr(self, "_is_reachable", True if self.is_authenticated else False)
+
+    def is_ready(self) -> bool:
+        """Whether the provider is authenticated, reachable, and has available models."""
+        if self.is_local:
+            from core.providers.local import LocalProvider
+            return LocalProvider.is_available()
+        return self.is_authenticated and self.is_reachable
 
     def check_privacy_policy(self) -> None:
         """Enforce privacy policy: prevent data leaving the device in LOCAL_ONLY mode."""

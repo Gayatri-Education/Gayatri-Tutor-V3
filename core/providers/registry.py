@@ -57,14 +57,14 @@ class ProviderRegistry:
         return result
 
     def _check_provider_available(self, provider: LLMProvider) -> bool:
-        """Quick check if a provider is reachable."""
+        """Quick check if a provider is ready and reachable."""
         try:
             if provider.key == "local":
                 from core.providers.local import LocalProvider
                 return LocalProvider.is_available()
-            # Cloud providers: check if they have any models
-            models = provider.list_models()
-            return len(models) > 0
+            if hasattr(provider, "is_ready"):
+                return provider.is_ready()
+            return provider.is_authenticated and provider.is_reachable
         except Exception:
             return False
 
@@ -128,6 +128,10 @@ class ProviderRegistry:
                 if (exec_mode is None or exec_mode == ExecutionMode.LOCAL_ONLY) and provider.key != "local":
                     logger.debug(f"Skipping cloud provider '{provider.key}' — privacy mode is local_only")
                     continue
+                # Ensure provider is actually ready before adding to fallback chain (Audit #26)
+                if not self._check_provider_available(provider):
+                    logger.debug(f"Skipping provider '{provider.key}' — not ready/available")
+                    continue
                 try:
                     models = provider.list_models()
                     matching = [m for m in models if m.speed_tier == tier]
@@ -144,6 +148,56 @@ class ProviderRegistry:
         return [m.to_dict() for m in self.get_all_models()]
 
 
+def _register_default_providers(registry: ProviderRegistry) -> None:
+    """Pre-register default providers using stored keys if available."""
+    try:
+        from core.providers.local import LocalLLMProvider
+        if registry.get("local") is None:
+            registry.register(LocalLLMProvider())
+    except Exception as exc:
+        logger.warning(f"Could not register default local provider: {exc}")
+
+    google_key = ""
+    anthropic_key = ""
+    openai_key = ""
+    try:
+        from core.security.secrets import get_vault
+        vault = get_vault()
+        google_key = vault.retrieve_key("google") or ""
+        anthropic_key = vault.retrieve_key("anthropic") or ""
+        openai_key = vault.retrieve_key("openai") or ""
+    except Exception as exc:
+        logger.debug(f"Could not retrieve keys from vault during default registration: {exc}")
+
+    try:
+        from core.providers.google import GoogleProvider
+        if registry.get("google") is None:
+            registry.register(GoogleProvider(api_key=google_key))
+    except Exception as exc:
+        logger.warning(f"Could not register default Google provider: {exc}")
+
+    try:
+        from core.providers.anthropic import AnthropicProvider
+        if registry.get("anthropic") is None:
+            registry.register(AnthropicProvider(api_key=anthropic_key))
+    except Exception as exc:
+        logger.warning(f"Could not register default Anthropic provider: {exc}")
+
+    try:
+        from core.providers.openai_compat import OpenAICompatibleProvider
+        if registry.get("openai") is None:
+            registry.register(
+                OpenAICompatibleProvider(
+                    name="OpenAI",
+                    key="openai",
+                    base_url="https://api.openai.com/v1",
+                    api_key=openai_key,
+                )
+            )
+    except Exception as exc:
+        logger.warning(f"Could not register default OpenAI provider: {exc}")
+
+
 # Global registry (lazy-initialized)
 _registry: ProviderRegistry | None = None
 
@@ -153,4 +207,5 @@ def get_registry() -> ProviderRegistry:
     global _registry
     if _registry is None:
         _registry = ProviderRegistry()
+        _register_default_providers(_registry)
     return _registry
