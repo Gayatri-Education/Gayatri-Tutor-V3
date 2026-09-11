@@ -203,7 +203,7 @@ def register_prompt_agents() -> None:
     @agent_registry.register(
         name="Personal Assistant Agent",
         commands=["/assistant", "/pa"],
-        triggers=["schedule", "remind me", "my tasks", "plan my day"],
+        triggers=["manage schedule", "daily schedule", "remind me", "my tasks", "plan my day"],
         description="Schedule management, reminders, task coordination",
     )
     class PersonalAssistantAgent:
@@ -301,7 +301,7 @@ def register_prompt_agents() -> None:
     @agent_registry.register(
         name="Creative Agent",
         commands=["/creative", "/design"],
-        triggers=["design", "creative", "marketing content", "visual concept"],
+        triggers=["creative design", "creative writing", "marketing content", "visual concept"],
         description="Design concepts, marketing content, creative drafts",
     )
     class CreativeAgent:
@@ -339,7 +339,7 @@ def register_prompt_agents() -> None:
     @agent_registry.register(
         name="Sales Agent",
         commands=["/sales"],
-        triggers=["lead qualification", "outreach", "crm", "sales"],
+        triggers=["lead qualification", "sales outreach", "crm update", "sales pipeline"],
         description="Lead qualification, outreach drafting, CRM updates",
     )
     class SalesAgent:
@@ -434,7 +434,7 @@ def register_prompt_agents() -> None:
     @agent_registry.register(
         name="News Analyst Agent",
         commands=["/news"],
-        triggers=["news", "trends", "industry update", "market news"],
+        triggers=["latest news", "news update", "industry trends", "market news"],
         description="Industry news, trend identification, sector digests",
     )
     class NewsAgent:
@@ -493,7 +493,7 @@ def register_prompt_agents() -> None:
     @agent_registry.register(
         name="Policy Analyst Agent",
         commands=["/policy"],
-        triggers=["government scheme", "policy", "budget", "government program"],
+        triggers=["government scheme", "policy analysis", "policy budget", "government program"],
         description="Government schemes, budgets, policy synthesis",
     )
     class PolicyAgent:
@@ -569,7 +569,7 @@ def register_prompt_agents() -> None:
     @agent_registry.register(
         name="Crop Advisory Agent",
         commands=["/crop"],
-        triggers=["crop advisory", "farming", "soil", "weather", "yield"],
+        triggers=["crop advisory", "farming advice", "soil health", "crop weather", "crop yield"],
         description="Crop, soil, weather-informed advisory with yield estimation",
     )
     class CropAgent:

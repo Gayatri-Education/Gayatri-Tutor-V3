@@ -28,9 +28,68 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import re
 from typing import Any
 
 logger = logging.getLogger("gayatri.agents")
+
+# Contraction normalization mapping for negation and conversational English
+_CONTRACTIONS: dict[str, str] = {
+    "don't": "do not",
+    "dont": "do not",
+    "doesn't": "does not",
+    "doesnt": "does not",
+    "didn't": "did not",
+    "didnt": "did not",
+    "won't": "will not",
+    "wont": "will not",
+    "wouldn't": "would not",
+    "wouldnt": "would not",
+    "can't": "cannot",
+    "cant": "cannot",
+    "cannot": "can not",
+    "shouldn't": "should not",
+    "shouldnt": "should not",
+    "couldn't": "could not",
+    "couldnt": "could not",
+    "isn't": "is not",
+    "isnt": "is not",
+    "aren't": "are not",
+    "arent": "are not",
+}
+
+_NEGATION_WORDS: set[str] = {
+    "not", "never", "no", "stop", "without", "avoid", "neither", "nor", "none"
+}
+
+
+def expand_contractions(text: str) -> str:
+    """Expand common English contractions to separate negation words."""
+    words = text.split()
+    expanded = []
+    for w in words:
+        w_lower = w.lower()
+        if w_lower in _CONTRACTIONS:
+            expanded.append(_CONTRACTIONS[w_lower])
+        else:
+            expanded.append(w)
+    return " ".join(expanded)
+
+
+def normalize_text(text: str) -> str:
+    """Normalize text: expand contractions, remove punctuation, collapse whitespace."""
+    expanded = expand_contractions(text)
+    cleaned = re.sub(r"[^\w\s]", " ", expanded.lower())
+    return " ".join(cleaned.split())
+
+
+def is_negated_match(text_tokens: list[str], start_idx: int, window: int = 3) -> bool:
+    """Check if tokens immediately preceding start_idx contain any negation word.
+
+    Checks up to `window` tokens prior to start_idx.
+    """
+    check_window = text_tokens[max(0, start_idx - window):start_idx]
+    return any(token in _NEGATION_WORDS for token in check_window)
 
 
 @dataclass
@@ -48,14 +107,26 @@ class AgentSpec:
     _class: type | None = field(default=None, repr=False, compare=False)
 
     def can_handle(self, text: str) -> tuple[bool, float]:
-        """Check if this agent should handle the given text.
+        """Check if this agent should handle the given text using layered matching.
+
+        Layers:
+        1. Exact command match (priority 1.0)
+        2. Exact phrase match with word boundaries (0.95 multi-word, 0.70 single-word)
+        3. Normalized phrase match (0.85 multi-word, 0.65 single-word)
+        4. Ordered subphrase sequence match (0.65 for >= 75% sequence)
+        5. Weak token overlap fallback (penalized, capped at 0.55 / 0.40)
+
+        Negation awareness:
+        - If user text negates the trigger phrase (e.g. 'do not review my code'),
+          the trigger match is rejected.
+        - If trigger itself contains negation (e.g. 'not financial advice'),
+          the negation must appear in-sequence.
 
         Returns (should_handle, confidence).
         """
         text_lower = text.lower().strip()
 
-        # Check explicit commands — match complete command token (word-boundary)
-        # /transcribe must not match /trans (which is a prefix)
+        # Layer 1: Check explicit commands — match complete command token (word-boundary)
         for cmd in self.commands:
             cmd_lower = cmd.lower().lstrip("/")
             cmd_prefix = f"/{cmd_lower}"
@@ -64,22 +135,97 @@ class AgentSpec:
                 if remainder == "" or remainder[0] in (" ", "\t", "\n"):
                     return True, 1.0
 
-        # Check trigger phrases (fuzzy match)
-        best_score = 0.0
-        for trigger in self.triggers:
-            trigger_words = set(trigger.lower().split())
-            text_words = set(text_lower.split())
-            overlap = len(trigger_words & text_words)
-            if overlap > 0:
-                score = overlap / len(trigger_words)
-                
-                # Penalize single-word triggers to prevent aggressive misrouting
-                if len(trigger_words) == 1:
-                    score *= 0.5
-                    
-                best_score = max(best_score, score)
+        norm_text = normalize_text(text)
+        norm_tokens = norm_text.split()
+        if not norm_tokens:
+            return False, 0.0
 
-        threshold = 0.6  # at least 60% of trigger words must match (reduces false positives)
+        best_score = 0.0
+
+        for trigger in self.triggers:
+            raw_trig = trigger.strip()
+            if not raw_trig:
+                continue
+
+            trig_lower = raw_trig.lower()
+            norm_trig = normalize_text(raw_trig)
+            trig_tokens = norm_trig.split()
+            if not trig_tokens:
+                continue
+
+            is_multiword = len(trig_tokens) > 1
+            trig_has_negation = any(tok in _NEGATION_WORDS for tok in trig_tokens)
+
+            # Layer 2: Exact Substring Phrase Match
+            pattern = r"(?:\b|^)" + re.escape(trig_lower) + r"(?:\b|$)"
+            exact_match = re.search(pattern, text_lower)
+            if exact_match:
+                start_char = exact_match.start()
+                pre_text = normalize_text(text_lower[:start_char])
+                pre_tokens = pre_text.split()
+                if not trig_has_negation and any(tok in _NEGATION_WORDS for tok in pre_tokens[-3:]):
+                    continue  # Negated trigger action
+
+                score = 0.95 if is_multiword else 0.70
+                best_score = max(best_score, score)
+                continue
+
+            # Layer 3: Normalized Phrase Match
+            found_idx = -1
+            n_trig = len(trig_tokens)
+            for i in range(len(norm_tokens) - n_trig + 1):
+                if norm_tokens[i:i + n_trig] == trig_tokens:
+                    found_idx = i
+                    break
+
+            if found_idx != -1:
+                if not trig_has_negation and is_negated_match(norm_tokens, found_idx, window=3):
+                    continue  # Negated trigger action
+
+                score = 0.85 if is_multiword else 0.65
+                best_score = max(best_score, score)
+                continue
+
+            # Layer 4: Ordered Subphrase / Token Sequence Match (>= 3 words)
+            if is_multiword and len(trig_tokens) >= 3 and not trig_has_negation:
+                max_consec = 0
+                consec_idx = -1
+                for sub_len in range(len(trig_tokens) - 1, 1, -1):
+                    for start in range(len(trig_tokens) - sub_len + 1):
+                        sub = trig_tokens[start:start + sub_len]
+                        for j in range(len(norm_tokens) - sub_len + 1):
+                            if norm_tokens[j:j + sub_len] == sub:
+                                if sub_len > max_consec:
+                                    max_consec = sub_len
+                                    consec_idx = j
+                                break
+                        if max_consec > 0:
+                            break
+                    if max_consec > 0:
+                        break
+
+                if max_consec >= 2:
+                    ratio = max_consec / len(trig_tokens)
+                    if ratio >= 0.75:
+                        if not is_negated_match(norm_tokens, consec_idx, window=3):
+                            score = 0.65 * ratio
+                            best_score = max(best_score, score)
+                            continue
+
+            # Layer 5: Token Overlap (penalized, unordered fallback)
+            if not trig_has_negation:
+                trig_word_set = set(trig_tokens)
+                text_word_set = set(norm_tokens)
+                overlap = len(trig_word_set & text_word_set)
+                if overlap > 0:
+                    overlap_ratio = overlap / len(trig_tokens)
+                    if is_multiword:
+                        score = 0.55 * overlap_ratio
+                    else:
+                        score = 0.40 * overlap_ratio
+                    best_score = max(best_score, score)
+
+        threshold = 0.60
         return best_score >= threshold, best_score
 
 
@@ -105,9 +251,33 @@ class AgentRegistry:
     The dispatcher queries this registry to find the best agent for a request.
     """
 
+    MIN_CONFIDENCE_THRESHOLD: float = 0.60
+    MIN_CONFIDENCE_MARGIN: float = 0.10
+
     def __init__(self):
         self._agents: dict[str, AgentSpec] = {}
         self._classes: dict[str, type] = {}
+        self._default_agent: str | None = None
+        self.ambiguity_margin: float = self.MIN_CONFIDENCE_MARGIN
+        self.min_confidence_threshold: float = self.MIN_CONFIDENCE_THRESHOLD
+
+    def set_default_agent(self, name: str | None) -> None:
+        """Set fallback default agent when dispatch is ambiguous or no agent matches."""
+        self._default_agent = name
+
+    def get_default_agent(self) -> AgentSpec | None:
+        """Get fallback default agent spec if registered."""
+        if self._default_agent and self._default_agent in self._agents:
+            return self._agents[self._default_agent]
+        return None
+
+    @property
+    def default_agent(self) -> str | None:
+        return self._default_agent
+
+    @default_agent.setter
+    def default_agent(self, name: str | None) -> None:
+        self.set_default_agent(name)
 
     def register(
         self,
@@ -175,23 +345,74 @@ class AgentRegistry:
     def dispatch(self, text: str) -> tuple[AgentSpec, float] | None:
         """Find the best agent for the given text.
 
-        Returns (AgentSpec, confidence) or None if no agent matches.
+        Layered matching & disambiguation:
+        1. Explicit command check (priority 1.0)
+        2. Candidate evaluation with layered matching confidence
+        3. Ambiguity margin and tie handling:
+           - If best candidate is command (1.0), it wins unconditionally.
+           - If top candidate and runner-up are within ambiguity_margin (< 0.10),
+             or tied, routing is deemed ambiguous and falls back to default agent or None.
+           - Otherwise, top candidate is dispatched.
+
+        Returns (AgentSpec, confidence) or None if no agent matches or ambiguous.
         """
-        best_agent = None
-        best_score = 0.0
+        text_lower = text.lower().strip()
 
+        # 1. Explicit command check (priority 1.0)
         for spec in self._agents.values():
-            matches, score = spec.can_handle(text)
-            if matches and score > best_score:
-                best_score = score
-                best_agent = spec
+            for cmd in spec.commands:
+                cmd_lower = cmd.lower().lstrip("/")
+                cmd_prefix = f"/{cmd_lower}"
+                if text_lower.startswith(cmd_prefix):
+                    remainder = text_lower[len(cmd_prefix):]
+                    if remainder == "" or remainder[0] in (" ", "\t", "\n"):
+                        logger.info(f"Dispatched via explicit command '{cmd}' to '{spec.name}' (confidence: 1.0)")
+                        return spec, 1.0
 
-        if best_agent and best_score >= 0.6:
-            logger.info(f"Dispatched to '{best_agent.name}' (confidence: {best_score:.2f})")
-            return best_agent, best_score
+        # 2. Evaluate all agents
+        candidates: list[tuple[AgentSpec, float]] = []
+        for spec in self._agents.values():
+            can_handle, score = spec.can_handle(text)
+            if can_handle and score >= self.min_confidence_threshold:
+                candidates.append((spec, score))
 
-        logger.info(f"No agent matched for: {text[:80]}")
-        return None
+        if not candidates:
+            default = self.get_default_agent()
+            if default:
+                logger.info(f"No agent matched; falling back to default agent '{default.name}'")
+                return default, 0.5
+            logger.info(f"No agent matched for: {text[:80]}")
+            return None
+
+        # Sort descending by score
+        candidates.sort(key=lambda x: x[1], reverse=True)
+
+        if len(candidates) == 1:
+            best_spec, best_score = candidates[0]
+            logger.info(f"Dispatched to '{best_spec.name}' (confidence: {best_score:.2f})")
+            return best_spec, best_score
+
+        # 3. Multiple candidates: check ambiguity margin and tie handling
+        best_spec, best_score = candidates[0]
+        second_spec, second_score = candidates[1]
+
+        if best_score == 1.0:
+            return best_spec, best_score
+
+        score_diff = best_score - second_score
+        if score_diff < self.ambiguity_margin:
+            logger.warning(
+                f"Ambiguous agent dispatch between '{best_spec.name}' ({best_score:.2f}) and "
+                f"'{second_spec.name}' ({second_score:.2f}) with margin {score_diff:.2f} < "
+                f"{self.ambiguity_margin}. Falling back to default/general."
+            )
+            default = self.get_default_agent()
+            if default:
+                return default, 0.5
+            return None
+
+        logger.info(f"Dispatched to '{best_spec.name}' (confidence: {best_score:.2f}, margin: {score_diff:.2f})")
+        return best_spec, best_score
 
     def instantiate(self, name: str, **kwargs) -> Any:
         """Create an instance of an agent by name."""
