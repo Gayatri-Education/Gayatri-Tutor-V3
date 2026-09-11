@@ -23,6 +23,7 @@ _SETTINGS_SCHEMA: dict[str, type] = {
     "local_model_path": str,
     "providers": dict,      # {provider_key: {enabled, api_key_ref, ...}}
     "router_preference": str,  # "balanced" | "quality" | "cheap" | "local_only"
+    "privacy_mode": str,    # "local_only" | "cloud_allowed"
     "first_run_complete": bool,
     "telemetry_enabled": bool,
     "auto_download_model": bool,
@@ -38,6 +39,7 @@ _DEFAULTS: dict[str, Any] = {
     "local_model_path": "",
     "providers": {},
     "router_preference": "balanced",
+    "privacy_mode": "local_only",  # Default: no data leaves device
     "first_run_complete": False,
     "telemetry_enabled": False,
     "auto_download_model": True,

@@ -165,5 +165,25 @@ class LLMProvider(ABC):
         """Whether this provider supports JSON mode output."""
         return False
 
+    @property
+    def is_local(self) -> bool:
+        """Whether this provider executes purely locally on-device."""
+        return self.key == "local"
+
+    def check_privacy_policy(self) -> None:
+        """Enforce privacy policy: prevent data leaving the device in LOCAL_ONLY mode."""
+        if not self.is_local:
+            try:
+                from core.config import ExecutionMode
+                from core.settings import get_settings
+                mode = get_settings().get("privacy_mode", "local_only")
+                if mode == "local_only" or mode == ExecutionMode.LOCAL_ONLY.value:
+                    raise PermissionError(
+                        f"Data cannot leave the device: provider '{self.name}' ({self.key}) "
+                        "is blocked because privacy mode is set to 'local_only'."
+                    )
+            except ImportError:
+                pass
+
     def __repr__(self) -> str:
         return f"<LLMProvider {self.name} ({self.key})>"

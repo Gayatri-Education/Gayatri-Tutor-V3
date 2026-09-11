@@ -7,7 +7,15 @@ No hardcoding anywhere else in the codebase.
 from __future__ import annotations
 
 import os
+from enum import Enum
 from pathlib import Path
+
+
+class ExecutionMode(str, Enum):
+    """Execution mode for privacy enforcement."""
+    LOCAL_ONLY = "local_only"       # Data never leaves the device
+    CLOUD_ALLOWED = "cloud_allowed" # Cloud providers may be used (explicit opt-in)
+
 
 # ── Paths ──────────────────────────────────────────────────────────────
 

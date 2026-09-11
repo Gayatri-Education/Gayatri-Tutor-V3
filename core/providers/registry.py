@@ -104,7 +104,17 @@ class ProviderRegistry:
 
         Order: preferred_tier → medium → slow.
         Returns available providers only.
+        Respects privacy_mode: in LOCAL_ONLY mode, only local providers are included.
         """
+        # Check privacy mode
+        try:
+            from core.config import ExecutionMode
+            from core.settings import get_settings
+            mode_str = get_settings().get("privacy_mode", "local_only")
+            exec_mode = ExecutionMode(mode_str)
+        except Exception:
+            exec_mode = None  # fail safe — allow only local
+
         chain: list[tuple[LLMProvider, ModelInfo]] = []
         seen = set()
 
@@ -113,6 +123,10 @@ class ProviderRegistry:
         for tier in tier_order:
             for provider in self._providers.values():
                 if provider.key in seen:
+                    continue
+                # Enforce LOCAL_ONLY: skip cloud providers
+                if (exec_mode is None or exec_mode == ExecutionMode.LOCAL_ONLY) and provider.key != "local":
+                    logger.debug(f"Skipping cloud provider '{provider.key}' — privacy mode is local_only")
                     continue
                 try:
                     models = provider.list_models()

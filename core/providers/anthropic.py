@@ -150,6 +150,7 @@ class AnthropicProvider(LLMProvider):
 
     def chat(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> ChatResponse:
         """Non-streaming chat completion via Messages API."""
+        self.check_privacy_policy()
         opts = options or ChatOptions()
         import httpx
         start = time.time()
@@ -225,6 +226,7 @@ class AnthropicProvider(LLMProvider):
 
     def stream(self, messages: list[ChatMessage], options: ChatOptions | None = None) -> Iterator[str]:
         """Stream chat completion via Messages API."""
+        self.check_privacy_policy()
         opts = options or ChatOptions()
         import json
 
