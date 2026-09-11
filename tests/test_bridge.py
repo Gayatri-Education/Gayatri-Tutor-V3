@@ -80,3 +80,54 @@ def test_bridge_send_message_with_agent_selection(qtbot):
     assert opts.forced_agent == "Code Reviewer"
     assert "Review feedback" in received_tokens
 
+
+def test_bridge_set_setting_type_coercion(qtbot, tmp_path, monkeypatch):
+    """Verify bridge.set_setting cleanly coerces JSON-stringified types without errors."""
+    from core.settings import SettingsStore
+    test_store = SettingsStore(settings_path=tmp_path / "settings.json")
+    monkeypatch.setattr("core.settings.get_settings", lambda: test_store)
+
+    bridge = Bridge()
+
+    # Boolean setting with various representations
+    bridge.set_setting("auto_download_model", "true")
+    assert test_store.get("auto_download_model") is True
+
+    bridge.set_setting("auto_download_model", "false")
+    assert test_store.get("auto_download_model") is False
+
+    # Float setting
+    bridge.set_setting("temperature", "1.2")
+    assert test_store.get("temperature") == 1.2
+
+    # Integer setting
+    bridge.set_setting("max_tokens", "1024")
+    assert test_store.get("max_tokens") == 1024
+
+
+def test_bridge_save_and_delete_provider_key(qtbot, tmp_path, monkeypatch):
+    """Verify bridge.save_provider_key stores keys and deletes them when blank."""
+    from core.security.secrets import SecretsVault
+    test_vault = SecretsVault(vault_path=tmp_path / "vault.json")
+    monkeypatch.setattr("core.security.secrets.get_vault", lambda: test_vault)
+
+    bridge = Bridge()
+
+    # Save a key
+    bridge.save_provider_key("anthropic", "sk-ant-testkey12345678901234")
+    assert test_vault.has_key("anthropic")
+    assert test_vault.retrieve_key("anthropic") == "sk-ant-testkey12345678901234"
+
+    # Empty string should delete the key
+    bridge.save_provider_key("anthropic", "   ")
+    assert not test_vault.has_key("anthropic")
+    assert test_vault.retrieve_key("anthropic") is None
+
+
+def test_knowledge_graph_get_ldg():
+    """Verify get_ldg accessor in core.knowledge_graph returns a valid graph."""
+    from core.knowledge_graph import get_ldg, LearningDependencyGraph
+    ldg = get_ldg()
+    assert isinstance(ldg, LearningDependencyGraph)
+
+

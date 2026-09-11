@@ -275,24 +275,31 @@ class Bridge(QObject):
             except (json.JSONDecodeError, ValueError):
                 parsed = value
 
-            # Defensively coerce string representation if schema expects primitive type
-            if isinstance(parsed, str) and key in _SETTINGS_SCHEMA:
+            # Defensively coerce representation if schema expects primitive type
+            if key in _SETTINGS_SCHEMA:
                 expected_type = _SETTINGS_SCHEMA[key]
                 if expected_type is bool:
-                    if parsed.lower() in ("true", "1", "yes"):
-                        parsed = True
-                    elif parsed.lower() in ("false", "0", "no"):
-                        parsed = False
+                    if isinstance(parsed, bool):
+                        pass
+                    elif isinstance(parsed, str):
+                        if parsed.lower() in ("true", "1", "yes"):
+                            parsed = True
+                        elif parsed.lower() in ("false", "0", "no"):
+                            parsed = False
+                    elif isinstance(parsed, (int, float)):
+                        parsed = bool(parsed)
                 elif expected_type is int:
-                    try:
-                        parsed = int(parsed)
-                    except ValueError:
-                        pass
+                    if not isinstance(parsed, bool):
+                        try:
+                            parsed = int(parsed)
+                        except (ValueError, TypeError):
+                            pass
                 elif expected_type is float:
-                    try:
-                        parsed = float(parsed)
-                    except ValueError:
-                        pass
+                    if not isinstance(parsed, bool):
+                        try:
+                            parsed = float(parsed)
+                        except (ValueError, TypeError):
+                            pass
 
             store.set(key, parsed)
             logger.debug(f"Setting: {key} = {parsed!r}")
@@ -395,13 +402,18 @@ class Bridge(QObject):
             from core.security.secrets import get_vault
             from core.providers.registry import get_registry
             vault = get_vault()
-            vault.store_key(provider_key, api_key)
-            logger.info(f"Provider key saved: {provider_key}")
+            clean_key = api_key.strip()
+            if not clean_key:
+                vault.delete_key(provider_key)
+                logger.info(f"Provider key deleted: {provider_key}")
+            else:
+                vault.store_key(provider_key, clean_key)
+                logger.info(f"Provider key saved: {provider_key}")
 
             registry = get_registry()
             provider = registry.get(provider_key)
             if provider is not None and hasattr(provider, "_api_key"):
-                provider._api_key = api_key
+                provider._api_key = clean_key if clean_key else None
                 provider._models = None
         except Exception as exc:
             from core.errors import sanitize_error

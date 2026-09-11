@@ -445,39 +445,57 @@ class Orchestrator:
                     tutor_txn.rollback()
                 raise proc_exc
 
-            if response.text:
-                if getattr(response, "status", "SUCCESS") == "MODEL_UNAVAILABLE":
-                    logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE")
-                    if tutor_txn:
-                        tutor_txn.rollback()
-                    conv.add("user", user_message, agent_name=spec.name)
-                    latency = (time.time() - start) * 1000
-                    return TurnResult(
-                        text=response.text,
-                        model_used=f"agent:{spec.name}",
-                        routing_reason="agent_error:model_unavailable",
-                        latency_ms=latency,
-                        agent_name=spec.name,
-                        execution_mode=exec_mode.value,
-                        status="MODEL_UNAVAILABLE",
-                    )
+            resp_status = getattr(response, "status", "SUCCESS")
+            resp_text = response.text or ""
 
-                if spec.name == "Tutor":
-                    _post_tutor_response(session_id, tutor=self.get_tutor_engine())
-                    if tutor_txn:
-                        tutor_txn.commit()
+            if resp_status == "MODEL_UNAVAILABLE":
+                logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE")
+                if tutor_txn:
+                    tutor_txn.rollback()
                 conv.add("user", user_message, agent_name=spec.name)
-                conv.add("assistant", response.text, agent_name=spec.name)
                 latency = (time.time() - start) * 1000
                 return TurnResult(
-                    text=response.text,
+                    text=resp_text or "The local AI model is not installed or unavailable. Please download the model file to enable this agent.",
                     model_used=f"agent:{spec.name}",
-                    routing_reason=agent_routing_reason,
+                    routing_reason="agent_error:model_unavailable",
                     latency_ms=latency,
                     agent_name=spec.name,
                     execution_mode=exec_mode.value,
-                    status="SUCCESS",
+                    status="MODEL_UNAVAILABLE",
                 )
+
+            if resp_status == "ERROR":
+                logger.error(f"Agent {spec.name} reported ERROR")
+                if tutor_txn:
+                    tutor_txn.rollback()
+                conv.add("user", user_message, agent_name=spec.name)
+                latency = (time.time() - start) * 1000
+                return TurnResult(
+                    text=resp_text or f"Agent '{spec.name}' encountered an error processing your request.",
+                    model_used=f"agent:{spec.name}",
+                    routing_reason="agent_error",
+                    latency_ms=latency,
+                    agent_name=spec.name,
+                    execution_mode=exec_mode.value,
+                    status="ERROR",
+                )
+
+            if spec.name == "Tutor":
+                _post_tutor_response(session_id, tutor=self.get_tutor_engine())
+                if tutor_txn:
+                    tutor_txn.commit()
+            conv.add("user", user_message, agent_name=spec.name)
+            conv.add("assistant", resp_text, agent_name=spec.name)
+            latency = (time.time() - start) * 1000
+            return TurnResult(
+                text=resp_text,
+                model_used=f"agent:{spec.name}",
+                routing_reason=agent_routing_reason,
+                latency_ms=latency,
+                agent_name=spec.name,
+                execution_mode=exec_mode.value,
+                status="SUCCESS",
+            )
 
         # 2. No agent matched — query resolved model
         try:
@@ -522,6 +540,7 @@ class Orchestrator:
                 routing_reason=routing_reason,
                 latency_ms=latency,
                 execution_mode=exec_mode.value,
+                status="SUCCESS",
             )
         except Exception as exc:
             from core.errors import sanitize_error
@@ -534,6 +553,7 @@ class Orchestrator:
                 routing_reason=f"error:{type(exc).__name__}",
                 latency_ms=latency,
                 execution_mode=exec_mode.value,
+                status="ERROR",
             )
 
     def stream(self, user_message: str, session_id: str = "default",
@@ -583,23 +603,33 @@ class Orchestrator:
                     tutor_txn.rollback()
                 raise proc_exc
 
-            if response.text:
-                if getattr(response, "status", "SUCCESS") == "MODEL_UNAVAILABLE":
-                    logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE in stream")
-                    if tutor_txn:
-                        tutor_txn.rollback()
-                    conv.add("user", user_message, agent_name=spec.name)
-                    yield response.text, True
-                    return
+            resp_status = getattr(response, "status", "SUCCESS")
+            resp_text = response.text or ""
 
-                if spec.name == "Tutor":
-                    _post_tutor_response(session_id, tutor=self.get_tutor_engine())
-                    if tutor_txn:
-                        tutor_txn.commit()
+            if resp_status == "MODEL_UNAVAILABLE":
+                logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE in stream")
+                if tutor_txn:
+                    tutor_txn.rollback()
                 conv.add("user", user_message, agent_name=spec.name)
-                conv.add("assistant", response.text, agent_name=spec.name)
-                yield response.text, True
+                yield resp_text or "The local AI model is not installed or unavailable. Please download the model file to enable this agent.", True
                 return
+
+            if resp_status == "ERROR":
+                logger.error(f"Agent {spec.name} reported ERROR in stream")
+                if tutor_txn:
+                    tutor_txn.rollback()
+                conv.add("user", user_message, agent_name=spec.name)
+                yield resp_text or f"Agent '{spec.name}' encountered an error processing your request.", True
+                return
+
+            if spec.name == "Tutor":
+                _post_tutor_response(session_id, tutor=self.get_tutor_engine())
+                if tutor_txn:
+                    tutor_txn.commit()
+            conv.add("user", user_message, agent_name=spec.name)
+            conv.add("assistant", resp_text, agent_name=spec.name)
+            yield resp_text, True
+            return
 
         # No agent — stream from resolved model
         buffer = []
