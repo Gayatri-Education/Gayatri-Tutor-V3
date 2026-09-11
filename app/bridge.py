@@ -62,8 +62,11 @@ class Bridge(QObject):
             conv = self._orchestrator.get_conversation(self._session_id)
             if conv and conv.get_all():
                 from core.session import get_session_store
+                from core.tutor_engine import get_tutor_engine
                 store = get_session_store()
-                store.save_session(self._session_id, conv)
+                tutor = get_tutor_engine()
+                tutor_ctx = tutor.session_contexts.get(self._session_id)
+                store.save_session(self._session_id, conv, tutor_context=tutor_ctx)
         except Exception as exc:
             logger.error(f"Failed to save session: {exc}")
             self.error.emit(f"Warning: Failed to save session: {exc}")
@@ -385,9 +388,10 @@ class Bridge(QObject):
 
             store = get_session_store()
             messages = store.load_session(session_id)
+            tutor_ctx = store.load_tutor_context(session_id)
 
             orch = self._get_orchestrator()
-            orch.load_session(session_id, messages)
+            orch.load_session(session_id, messages, tutor_context=tutor_ctx)
             self._session_id = session_id
 
             logger.info(f"Loaded session {session_id}: {len(messages)} messages")

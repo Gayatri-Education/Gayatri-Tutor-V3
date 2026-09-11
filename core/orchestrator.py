@@ -394,9 +394,17 @@ class Orchestrator:
     def new_session(self, session_id: str = "default") -> Conversation:
         return _conversations.new_session(session_id)
 
-    def load_session(self, session_id: str, messages: list[dict]) -> Conversation:
+    def load_session(self, session_id: str, messages: list[dict],
+                     tutor_context: Any = None) -> Conversation:
         """Load a previous session into the active conversation."""
         conv = self.new_session(session_id)
         for msg in messages:
             conv.add(msg["role"], msg["content"], agent_name=msg.get("agent_name", ""))
+
+        tutor = _get_tutor_engine()
+        if tutor:
+            if tutor_context is not None:
+                tutor.session_contexts[session_id] = tutor_context
+            else:
+                tutor.get_or_create_context(session_id)
         return conv

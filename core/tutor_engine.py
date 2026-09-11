@@ -58,10 +58,28 @@ class TutorEngine:
         self.session_contexts: dict[str, TutorContext] = {}
 
     def get_or_create_context(self, session_id: str) -> TutorContext:
-        """Get or create teaching context for a session."""
+        """Get or create teaching context for a session, restoring from DB if available."""
         if session_id not in self.session_contexts:
+            try:
+                from core.session import get_session_store
+                stored = get_session_store().load_tutor_context(session_id)
+                if stored is not None:
+                    self.session_contexts[session_id] = stored
+                    return stored
+            except Exception as exc:
+                logger.debug(f"Could not load persisted tutor context: {exc}")
             self.session_contexts[session_id] = TutorContext()
         return self.session_contexts[session_id]
+
+    def save_context(self, session_id: str) -> None:
+        """Persist tutor teaching context to database."""
+        ctx = self.session_contexts.get(session_id)
+        if ctx:
+            try:
+                from core.session import get_session_store
+                get_session_store().save_tutor_context(session_id, ctx)
+            except Exception as exc:
+                logger.debug(f"Failed to persist tutor context for session {session_id}: {exc}")
 
     def get_next_concept_for_session(self, session_id: str) -> Any:
         """Get the next concept to teach, advancing from current if mastered."""
@@ -80,6 +98,7 @@ class TutorEngine:
                 ctx.mastery = self.ldg.get_mastery(next_concept.id)
                 ctx.waiting_for_answer = False
                 ctx.last_response_type = "explain"
+                self.save_context(session_id)
                 logger.info(f"Advanced to concept: {next_concept.name}")
 
         return self.ldg.get_concept(ctx.current_concept_id) if ctx.current_concept_id else None
@@ -109,6 +128,7 @@ class TutorEngine:
         ctx.last_response_type = "feedback" if ctx.waiting_for_answer else "explain"
         ctx.last_attempt_correct = correct
         ctx.waiting_for_answer = False
+        self.save_context(session_id)
 
         return new_mastery
 
@@ -117,6 +137,7 @@ class TutorEngine:
         ctx = self.get_or_create_context(session_id)
         ctx.waiting_for_answer = True
         ctx.last_response_type = "question"
+        self.save_context(session_id)
 
     def is_waiting_for_answer(self, session_id: str) -> bool:
         """Check if the tutor is waiting for a student answer."""
