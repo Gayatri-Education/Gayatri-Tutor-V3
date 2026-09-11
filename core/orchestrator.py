@@ -10,6 +10,7 @@ LDG integration: when the Tutor agent is invoked, the orchestrator:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -25,7 +26,8 @@ logger = logging.getLogger("gayatri.orchestrator")
 # Global conversation store — one conversation per session
 _conversations = ConversationStore()
 
-# LDG lazy init
+# LDG and TutorEngine lazy init with reentrant lock
+_init_lock = threading.RLock()
 _ldg: Any = None
 _tutor_engine: Any = None
 
@@ -34,19 +36,22 @@ def _get_ldg():
     """Lazy-load the Learning Dependency Graph with default curriculum."""
     global _ldg
     if _ldg is None:
-        try:
-            from core.config import LDG_CURICULUM_DIR
-            from core.knowledge_graph import LearningDependencyGraph, load_curriculum
-            _ldg = LearningDependencyGraph()
-            curriculum_path = LDG_CURICULUM_DIR / "python_basics.json"
-            if curriculum_path.exists():
-                load_curriculum(_ldg, curriculum_path)
-                logger.info(f"LDG loaded: {curriculum_path}")
-            else:
-                logger.info("LDG initialized (no default curriculum)")
-        except Exception as exc:
-            logger.error(f"LDG init failed: {exc}")
-            _ldg = None
+        with _init_lock:
+            if _ldg is None:
+                try:
+                    from core.config import LDG_CURICULUM_DIR
+                    from core.knowledge_graph import LearningDependencyGraph, load_curriculum
+                    ldg = LearningDependencyGraph()
+                    curriculum_path = LDG_CURICULUM_DIR / "python_basics.json"
+                    if curriculum_path.exists():
+                        load_curriculum(ldg, curriculum_path)
+                        logger.info(f"LDG loaded: {curriculum_path}")
+                    else:
+                        logger.info("LDG initialized (no default curriculum)")
+                    _ldg = ldg
+                except Exception as exc:
+                    logger.error(f"LDG init failed: {exc}")
+                    _ldg = None
     return _ldg
 
 
@@ -54,17 +59,19 @@ def _get_tutor_engine():
     """Lazy-load the Tutor Engine with LDG."""
     global _tutor_engine
     if _tutor_engine is None:
-        try:
-            from core.tutor_engine import TutorEngine
-            ldg = _get_ldg()
-            if ldg:
-                _tutor_engine = TutorEngine(ldg)
-                logger.info("TutorEngine initialized")
-            else:
-                logger.warning("TutorEngine: LDG not available")
-        except Exception as exc:
-            logger.error(f"TutorEngine init failed: {exc}")
-            _tutor_engine = None
+        with _init_lock:
+            if _tutor_engine is None:
+                try:
+                    from core.tutor_engine import TutorEngine
+                    ldg = _get_ldg()
+                    if ldg:
+                        _tutor_engine = TutorEngine(ldg)
+                        logger.info("TutorEngine initialized")
+                    else:
+                        logger.warning("TutorEngine: LDG not available")
+                except Exception as exc:
+                    logger.error(f"TutorEngine init failed: {exc}")
+                    _tutor_engine = None
     return _tutor_engine
 
 
@@ -88,13 +95,14 @@ def _get_execution_mode() -> ExecutionMode:
         return ExecutionMode.LOCAL_ONLY
 
 
-def _inject_tutor_context(context: AgentContext, session_id: str) -> None:
+def _inject_tutor_context(context: AgentContext, session_id: str,
+                          tutor: Any = None, ldg: Any = None) -> None:
     """Inject LDG concept context into AgentContext.metadata for Tutor agent.
 
     Side-effect: mutates context.metadata in place.
     """
-    tutor = _get_tutor_engine()
-    ldg = _get_ldg()
+    tutor = tutor or _get_tutor_engine()
+    ldg = ldg or _get_ldg()
     if not tutor or not ldg:
         return
 
@@ -140,14 +148,15 @@ def _inject_tutor_context(context: AgentContext, session_id: str) -> None:
         logger.error(f"Failed to inject tutor context: {exc}")
 
 
-def _evaluate_tutor_response(session_id: str, user_message: str, agent_response: str) -> None:
+def _evaluate_tutor_response(session_id: str, user_message: str, agent_response: str,
+                             tutor: Any = None, ldg: Any = None) -> None:
     """Evaluate student response and update LDG mastery.
 
     Called after the Tutor agent responds.
     Uses simple heuristics to detect correctness (no LLM-as-judge for privacy).
     """
-    tutor = _get_tutor_engine()
-    ldg = _get_ldg()
+    tutor = tutor or _get_tutor_engine()
+    ldg = ldg or _get_ldg()
     if not tutor or not ldg:
         return
 
@@ -185,9 +194,10 @@ def _evaluate_tutor_response(session_id: str, user_message: str, agent_response:
     except Exception as exc:
         logger.error(f"Failed to evaluate tutor response: {exc}")
 
-def _post_tutor_response(session_id: str) -> None:
+
+def _post_tutor_response(session_id: str, tutor: Any = None) -> None:
     """Mark the tutor as waiting for an answer after it responds."""
-    tutor = _get_tutor_engine()
+    tutor = tutor or _get_tutor_engine()
     if tutor:
         tutor.set_waiting_for_answer(session_id)
 
@@ -220,14 +230,38 @@ class Orchestrator:
 
     LDG integration: Tutor agent gets concept context injected.
     Multi-turn conversation history maintained per session.
+    Thread-safe turn processing and dependency-injected session management.
     """
 
-    def __init__(self, registry=None, runtime=None):
+    def __init__(
+        self,
+        registry=None,
+        runtime=None,
+        conversations: ConversationStore | None = None,
+        tutor_engine: Any = None,
+        ldg: Any = None,
+    ):
         self.registry = registry or agent_registry
         self.runtime = runtime or AgentRuntime(registry=self.registry)
+        self.conversations = conversations if conversations is not None else _conversations
+        self._tutor_engine = tutor_engine
+        self._ldg = ldg
+        self._lock = threading.RLock()
+
+    def get_tutor_engine(self) -> Any:
+        """Get the bound TutorEngine or fall back to global singleton."""
+        if self._tutor_engine is not None:
+            return self._tutor_engine
+        return _get_tutor_engine()
+
+    def get_ldg(self) -> Any:
+        """Get the bound LDG or fall back to global singleton."""
+        if self._ldg is not None:
+            return self._ldg
+        return _get_ldg()
 
     def _get_conversation(self, session_id: str) -> Conversation:
-        return _conversations.get(session_id)
+        return self.conversations.get(session_id)
 
     def submit(self, user_message: str, session_id: str = "default",
                options: TurnOptions | None = None) -> TurnResult:
@@ -257,8 +291,14 @@ class Orchestrator:
 
             # Inject LDG context for Tutor agent
             if spec.name == "Tutor":
-                _evaluate_tutor_response(session_id, user_message, "")
-                _inject_tutor_context(context, session_id)
+                _evaluate_tutor_response(
+                    session_id, user_message, "",
+                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                )
+                _inject_tutor_context(
+                    context, session_id,
+                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                )
 
             response = self.runtime.process(user_message, context, spec=spec)
 
@@ -278,7 +318,7 @@ class Orchestrator:
                     )
 
                 if spec.name == "Tutor":
-                    _post_tutor_response(session_id)
+                    _post_tutor_response(session_id, tutor=self.get_tutor_engine())
                 conv.add("user", user_message, agent_name=spec.name)
                 conv.add("assistant", response.text, agent_name=spec.name)
                 latency = (time.time() - start) * 1000
@@ -357,8 +397,14 @@ class Orchestrator:
             )
 
             if spec.name == "Tutor":
-                _evaluate_tutor_response(session_id, user_message, "")
-                _inject_tutor_context(context, session_id)
+                _evaluate_tutor_response(
+                    session_id, user_message, "",
+                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                )
+                _inject_tutor_context(
+                    context, session_id,
+                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                )
 
             response = self.runtime.process(user_message, context, spec=spec)
 
@@ -370,7 +416,7 @@ class Orchestrator:
                     return
 
                 if spec.name == "Tutor":
-                    _post_tutor_response(session_id)
+                    _post_tutor_response(session_id, tutor=self.get_tutor_engine())
                 conv.add("user", user_message, agent_name=spec.name)
                 conv.add("assistant", response.text, agent_name=spec.name)
                 yield response.text, True
@@ -407,26 +453,32 @@ class Orchestrator:
         yield "", True
 
     def clear_session(self, session_id: str = "default") -> None:
-        conv = self._get_conversation(session_id)
-        conv.clear()
+        with self._lock:
+            conv = self._get_conversation(session_id)
+            conv.clear()
+            tutor = self.get_tutor_engine()
+            if tutor and hasattr(tutor, "clear_session"):
+                tutor.clear_session(session_id)
 
     def get_conversation(self, session_id: str = "default") -> Conversation:
         return self._get_conversation(session_id)
 
     def new_session(self, session_id: str = "default") -> Conversation:
-        return _conversations.new_session(session_id)
+        return self.conversations.new_session(session_id)
 
     def load_session(self, session_id: str, messages: list[dict],
                      tutor_context: Any = None) -> Conversation:
         """Load a previous session into the active conversation."""
-        conv = self.new_session(session_id)
-        for msg in messages:
-            conv.add(msg["role"], msg["content"], agent_name=msg.get("agent_name", ""))
+        with self._lock:
+            conv = self.new_session(session_id)
+            for msg in messages:
+                conv.add(msg["role"], msg["content"], agent_name=msg.get("agent_name", ""))
 
-        tutor = _get_tutor_engine()
-        if tutor:
-            if tutor_context is not None:
-                tutor.session_contexts[session_id] = tutor_context
-            else:
-                tutor.get_or_create_context(session_id)
-        return conv
+            tutor = self.get_tutor_engine()
+            if tutor:
+                if tutor_context is not None:
+                    with tutor._lock:
+                        tutor.session_contexts[session_id] = tutor_context
+                else:
+                    tutor.get_or_create_context(session_id)
+            return conv

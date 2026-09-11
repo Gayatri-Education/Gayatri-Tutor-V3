@@ -55,21 +55,24 @@ class Bridge(QObject):
             )
         return self._orchestrator
 
-    def _save_current_session(self):
+    def _save_session_by_id(self, session_id: str):
         try:
             if not self._orchestrator:
                 return
-            conv = self._orchestrator.get_conversation(self._session_id)
+            conv = self._orchestrator.get_conversation(session_id)
             if conv and conv.get_all():
                 from core.session import get_session_store
                 from core.tutor_engine import get_tutor_engine
                 store = get_session_store()
-                tutor = get_tutor_engine()
-                tutor_ctx = tutor.session_contexts.get(self._session_id)
-                store.save_session(self._session_id, conv, tutor_context=tutor_ctx)
+                tutor = self._orchestrator.get_tutor_engine() if hasattr(self._orchestrator, "get_tutor_engine") else get_tutor_engine()
+                tutor_ctx = tutor.session_contexts.get(session_id) if tutor else None
+                store.save_session(session_id, conv, tutor_context=tutor_ctx)
         except Exception as exc:
-            logger.error(f"Failed to save session: {exc}")
+            logger.error(f"Failed to save session {session_id}: {exc}")
             self.error.emit(f"Warning: Failed to save session: {exc}")
+
+    def _save_current_session(self):
+        self._save_session_by_id(self._session_id)
 
     def set_view(self, view: QWebEngineView):
         self._view = view
@@ -113,25 +116,38 @@ class Bridge(QObject):
 
         orch = self._get_orchestrator()
         self._generation_active = True
+        generation_session_id = self._session_id
 
         try:
-            for token, is_done in orch.stream(message, session_id=self._session_id):
+            for token, is_done in orch.stream(message, session_id=generation_session_id):
+                # Verify session hasn't switched during generation (Audit #134)
+                if self._session_id != generation_session_id:
+                    logger.warning(
+                        f"Active session changed from {generation_session_id} to {self._session_id} "
+                        "during streaming; discarding output for superseded session."
+                    )
+                    break
+
                 if is_done:
-                    self._save_current_session()
+                    self._save_session_by_id(generation_session_id)
                     self.done.emit()
                     return
                 elif token:
                     self.token.emit(0, token)
         except Exception as exc:
             logger.error(f"send_message error: {exc}")
-            self.error.emit(str(exc))
-            self.done.emit()
+            if self._session_id == generation_session_id:
+                self.error.emit(str(exc))
+                self.done.emit()
         finally:
             self._generation_active = False
 
     @Slot()
     def new_chat(self):
         """Start a new conversation."""
+        if self._generation_active:
+            self.error.emit("Cannot start a new chat while a response is generating.")
+            return
         import uuid
         self._save_current_session()
         self._session_id = str(uuid.uuid4())
@@ -382,6 +398,9 @@ class Bridge(QObject):
     @Slot(str)
     def load_session_id(self, session_id: str):
         """Load a previous session into the active conversation."""
+        if self._generation_active:
+            self.error.emit("Cannot switch session while a response is generating.")
+            return
         try:
             self._save_current_session()
             from core.session import get_session_store

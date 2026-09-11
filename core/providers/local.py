@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 
 from core.config import (
@@ -58,9 +59,12 @@ class LocalProvider:
     """Loads and runs a GGUF model via llama-cpp-python.
 
     Lazy-loads the model on first use. Singleton — load once, reuse.
+    Thread-safe model loading and inference synchronization.
     """
 
     _model = None
+    _model_lock = threading.Lock()
+    _infer_lock = threading.Lock()
     MODEL_PATH = LOCAL_MODEL_DIR / LOCAL_MODEL_FILE
 
     @classmethod
@@ -68,78 +72,83 @@ class LocalProvider:
         """Load the GGUF model. Called once.
 
         Auto-detects hardware if not explicitly overridden.
+        Thread-safe singleton loading.
         """
         if cls._model is not None and not override_params:
             return cls._model
 
-        try:
-            from llama_cpp import Llama
-        except ImportError:
-            raise LocalModelError(
-                "llama-cpp-python not installed. Run: pip install llama-cpp-python"
-            )
+        with cls._model_lock:
+            if cls._model is not None and not override_params:
+                return cls._model
 
-        model_path = cls.MODEL_PATH
-        if not model_path.exists():
-            raise LocalModelError(
-                f"Model not found at {model_path}. "
-                "Download the fine-tuned GGUF model first."
-            )
-
-        actual_size = model_path.stat().st_size
-        if actual_size < 1024 * 1024:
-            raise LocalModelError(
-                f"Model file at {model_path} is only {actual_size} bytes — "
-                "the download failed (likely a placeholder). Delete the file and "
-                "re-download via the app's Download button."
-            )
-
-        logger.info(f"Loading model: {model_path.name} ({model_path.stat().st_size / 1024 / 1024:.1f} MB)")
-        start = time.time()
-
-        # Use override params if provided, otherwise auto-detect
-        if override_params:
-            n_gpu_layers = override_params.get("n_gpu_layers", LOCAL_MODEL_GPU_LAYERS)
-            n_ctx = override_params.get("n_ctx", LOCAL_MODEL_CONTEXT)
-            n_threads = override_params.get("n_threads", 4)
-        else:
-            # Auto-detect hardware
             try:
-                from core.hardware import detect_hardware, recommend_llama_params
-                profile = detect_hardware()
-                model_size_mb = int(model_path.stat().st_size / (1024 * 1024))
-                params = recommend_llama_params(profile, model_size_mb)
-                n_gpu_layers = params.n_gpu_layers
-                n_ctx = params.n_ctx
-                n_threads = params.n_threads
-                logger.info(
-                    f"Auto-detected: GPU={profile.gpu_name} "
-                    f"(layers={n_gpu_layers}, ctx={n_ctx}, threads={n_threads})"
+                from llama_cpp import Llama
+            except ImportError:
+                raise LocalModelError(
+                    "llama-cpp-python not installed. Run: pip install llama-cpp-python"
+                )
+
+            model_path = cls.MODEL_PATH
+            if not model_path.exists():
+                raise LocalModelError(
+                    f"Model not found at {model_path}. "
+                    "Download the fine-tuned GGUF model first."
+                )
+
+            actual_size = model_path.stat().st_size
+            if actual_size < 1024 * 1024:
+                raise LocalModelError(
+                    f"Model file at {model_path} is only {actual_size} bytes — "
+                    "the download failed (likely a placeholder). Delete the file and "
+                    "re-download via the app's Download button."
+                )
+
+            logger.info(f"Loading model: {model_path.name} ({model_path.stat().st_size / 1024 / 1024:.1f} MB)")
+            start = time.time()
+
+            # Use override params if provided, otherwise auto-detect
+            if override_params:
+                n_gpu_layers = override_params.get("n_gpu_layers", LOCAL_MODEL_GPU_LAYERS)
+                n_ctx = override_params.get("n_ctx", LOCAL_MODEL_CONTEXT)
+                n_threads = override_params.get("n_threads", 4)
+            else:
+                # Auto-detect hardware
+                try:
+                    from core.hardware import detect_hardware, recommend_llama_params
+                    profile = detect_hardware()
+                    model_size_mb = int(model_path.stat().st_size / (1024 * 1024))
+                    params = recommend_llama_params(profile, model_size_mb)
+                    n_gpu_layers = params.n_gpu_layers
+                    n_ctx = params.n_ctx
+                    n_threads = params.n_threads
+                    logger.info(
+                        f"Auto-detected: GPU={profile.gpu_name} "
+                        f"(layers={n_gpu_layers}, ctx={n_ctx}, threads={n_threads})"
+                    )
+                except Exception as exc:
+                    logger.warning(f"Hardware detection failed, using defaults: {exc}")
+                    n_gpu_layers = LOCAL_MODEL_GPU_LAYERS
+                    n_ctx = LOCAL_MODEL_CONTEXT
+                    n_threads = 4
+
+            try:
+                cls._model = Llama(
+                    model_path=str(model_path),
+                    n_ctx=n_ctx,
+                    n_gpu_layers=n_gpu_layers,
+                    verbose=False,
+                    n_threads=n_threads,
                 )
             except Exception as exc:
-                logger.warning(f"Hardware detection failed, using defaults: {exc}")
-                n_gpu_layers = LOCAL_MODEL_GPU_LAYERS
-                n_ctx = LOCAL_MODEL_CONTEXT
-                n_threads = 4
+                raise LocalModelError(f"Failed to load GGUF model: {exc}") from exc
 
-        try:
-            cls._model = Llama(
-                model_path=str(model_path),
-                n_ctx=n_ctx,
-                n_gpu_layers=n_gpu_layers,
-                verbose=False,
-                n_threads=n_threads,
-            )
-        except Exception as exc:
-            raise LocalModelError(f"Failed to load GGUF model: {exc}") from exc
-
-        elapsed = time.time() - start
-        logger.info(f"Model loaded in {elapsed:.1f}s (layers={n_gpu_layers}, ctx={n_ctx})")
-        return cls._model
+            elapsed = time.time() - start
+            logger.info(f"Model loaded in {elapsed:.1f}s (layers={n_gpu_layers}, ctx={n_ctx})")
+            return cls._model
 
     @classmethod
     def health(cls) -> dict:
-        """Return structured health status of the local model."""
+        """Return structured health status of the local model without forcing heavy model load."""
         model_path = cls.MODEL_PATH
         if not model_path.exists():
             return {
@@ -159,36 +168,33 @@ class LocalProvider:
             }
 
         try:
-            cls._load_model()
+            import llama_cpp  # verify dependency without loading model
+        except ImportError:
+            return {
+                "available": False,
+                "reason_code": "missing_dependency",
+                "message": "llama-cpp-python not installed. Run: pip install llama-cpp-python",
+                "path": str(model_path)
+            }
+
+        if cls._model is not None:
             return {
                 "available": True,
                 "reason_code": "ok",
                 "message": "Model is loaded and ready.",
                 "path": str(model_path)
             }
-        except LocalModelError as e:
-            msg = str(e)
-            if "llama-cpp-python not installed" in msg:
-                code = "missing_dependency"
-            else:
-                code = "load_failure"
-            return {
-                "available": False,
-                "reason_code": code,
-                "message": msg,
-                "path": str(model_path)
-            }
-        except Exception as e:
-            return {
-                "available": False,
-                "reason_code": "unknown_error",
-                "message": f"Unexpected error: {e}",
-                "path": str(model_path)
-            }
+
+        return {
+            "available": True,
+            "reason_code": "ok",
+            "message": "Model file ready to load.",
+            "path": str(model_path)
+        }
 
     @classmethod
     def is_available(cls) -> bool:
-        """Check if the model file exists and loads successfully."""
+        """Check if the model file exists and is ready to load."""
         return cls.health()["available"]
 
     @classmethod
@@ -206,19 +212,20 @@ class LocalProvider:
         logger.info(f"Generating: max_tokens={max_tokens}, temp={temperature}")
 
         try:
-            stream = model.create_completion(
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-                stop=stop,
-                stream=True,
-            )
-            for chunk in stream:
-                text = chunk["choices"][0].get("text", "")
-                if text:
-                    yield text
+            with cls._infer_lock:
+                stream = model.create_completion(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    stop=stop,
+                    stream=True,
+                )
+                for chunk in stream:
+                    text = chunk["choices"][0].get("text", "")
+                    if text:
+                        yield text
         except Exception as exc:
             logger.error(f"Generation failed: {exc}")
             raise LocalModelError(f"Generation failed: {exc}") from exc
@@ -264,4 +271,5 @@ class LocalProvider:
     @classmethod
     def reset(cls):
         """Unload the model (for testing or reload)."""
-        cls._model = None
+        with cls._model_lock:
+            cls._model = None
