@@ -275,7 +275,7 @@ class Bridge(QObject):
                 providers.append({
                     "key": p["key"],
                     "name": p["name"],
-                    "has_key": vault.has_key(p["key"]),
+                    "has_key": True if p["key"] == "local" else vault.has_key(p["key"]),
                     "available": p["available"],
                 })
             return json.dumps(providers)
@@ -300,6 +300,8 @@ class Bridge(QObject):
                 provider._api_key = api_key
                 valid, msg = provider.validate_key()
                 provider._api_key = old_key
+            elif hasattr(provider, 'validate_key'):
+                valid, msg = provider.validate_key()
             else:
                 valid, msg = False, "Provider doesn't support key validation"
 
@@ -311,12 +313,19 @@ class Bridge(QObject):
 
     @Slot(str, str)
     def save_provider_key(self, provider_key: str, api_key: str):
-        """Save a provider API key to the vault."""
+        """Save a provider API key to the vault and update registered provider instance."""
         try:
             from core.security.secrets import get_vault
+            from core.providers.registry import get_registry
             vault = get_vault()
             vault.store_key(provider_key, api_key)
             logger.info(f"Provider key saved: {provider_key}")
+
+            registry = get_registry()
+            provider = registry.get(provider_key)
+            if provider is not None and hasattr(provider, "_api_key"):
+                provider._api_key = api_key
+                provider._models = None
         except Exception as exc:
             from core.errors import sanitize_error
             sanitized = sanitize_error(exc, category="bridge_save_provider_key")

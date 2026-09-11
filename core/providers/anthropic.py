@@ -248,9 +248,11 @@ class AnthropicProvider(LLMProvider):
             else:
                 payload["system"] = json_instruction
 
-        # Pick best available model
+        # Pick requested model or best available
         models = self.list_models()
-        if models:
+        if getattr(opts, "model", None):
+            payload["model"] = opts.model
+        elif models:
             payload["model"] = models[0].id
 
         try:
@@ -328,7 +330,9 @@ class AnthropicProvider(LLMProvider):
                 payload["system"] = json_instruction
 
         models = self.list_models()
-        if models:
+        if getattr(opts, "model", None):
+            payload["model"] = opts.model
+        elif models:
             payload["model"] = models[0].id
 
         try:

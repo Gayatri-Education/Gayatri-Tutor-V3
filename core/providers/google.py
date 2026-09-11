@@ -202,7 +202,7 @@ class GoogleProvider(LLMProvider):
 
         system_prompt, contents = self._convert_messages(messages)
         models = self.list_models()
-        model_id = models[0].id if models else "gemini-1.5-flash"
+        model_id = getattr(opts, "model", None) or (models[0].id if models else "gemini-1.5-flash")
 
         payload: dict[str, Any] = {
             "contents": contents,
@@ -262,7 +262,7 @@ class GoogleProvider(LLMProvider):
 
         system_prompt, contents = self._convert_messages(messages)
         models = self.list_models()
-        model_id = models[0].id if models else "gemini-1.5-flash"
+        model_id = getattr(opts, "model", None) or (models[0].id if models else "gemini-1.5-flash")
 
         payload: dict[str, Any] = {
             "contents": contents,

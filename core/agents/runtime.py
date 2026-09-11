@@ -19,6 +19,7 @@ class AgentContext:
     user_message: str
     history: list[dict] = field(default_factory=list)
     model_tier: str = "local"
+    model_override: str | None = None
     metadata: dict = field(default_factory=dict)
 
 

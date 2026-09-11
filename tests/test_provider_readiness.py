@@ -244,3 +244,179 @@ class TestOrchestratorTurnOptionsRouting:
         assert res.text == "Fast response"
         assert res.model_used == "fast-1"
         assert "forced_tier:fast:fastcloud/fast-1" in res.routing_reason
+
+
+class TestPostBatchBCohesionAndRegression:
+    """Cohesion and regression tests for ChatOptions.model, LocalLLMProvider, default registry, and Orchestrator."""
+
+    def test_chat_options_model_propagation_to_providers(self, monkeypatch):
+        mock_settings = MagicMock()
+        mock_settings.get.return_value = "cloud_allowed"
+        monkeypatch.setattr("core.settings.get_settings", lambda: mock_settings)
+
+        # 1. Anthropic Provider
+        anthropic = AnthropicProvider(api_key="sk-ant-test")
+        mock_resp_ant = MagicMock()
+        mock_resp_ant.status_code = 200
+        mock_resp_ant.json.return_value = {
+            "content": [{"type": "text", "text": "Anthropic custom model answer"}],
+            "model": "claude-custom-123",
+            "usage": {"input_tokens": 10, "output_tokens": 20},
+        }
+
+        with patch("httpx.post", return_value=mock_resp_ant) as mock_post:
+            resp = anthropic.chat(
+                [ChatMessage(role="user", content="hello")],
+                options=ChatOptions(model="claude-custom-123"),
+            )
+            assert resp.text == "Anthropic custom model answer"
+            called_payload = mock_post.call_args[1]["json"]
+            assert called_payload["model"] == "claude-custom-123"
+
+        # 2. OpenAI Compatible Provider
+        openai = OpenAICompatibleProvider(name="OpenAI", key="openai", base_url="https://api.openai.com/v1", api_key="sk-test")
+        mock_resp_oa = MagicMock()
+        mock_resp_oa.status_code = 200
+        mock_resp_oa.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "OpenAI custom model answer"}}],
+            "model": "gpt-custom-99",
+            "usage": {"total_tokens": 15},
+        }
+
+        with patch("httpx.post", return_value=mock_resp_oa) as mock_post:
+            resp_oa = openai.chat(
+                [ChatMessage(role="user", content="hello")],
+                options=ChatOptions(model="gpt-custom-99"),
+            )
+            assert resp_oa.text == "OpenAI custom model answer"
+            called_payload_oa = mock_post.call_args[1]["json"]
+            assert called_payload_oa["model"] == "gpt-custom-99"
+
+        # 3. Google Provider
+        google = GoogleProvider(api_key="goog-test")
+        mock_resp_g = MagicMock()
+        mock_resp_g.status_code = 200
+        mock_resp_g.json.return_value = {
+            "candidates": [{
+                "content": {"parts": [{"text": "Google custom model answer"}]},
+                "finishReason": "STOP",
+            }],
+            "usageMetadata": {"totalTokenCount": 25},
+        }
+
+        with patch("httpx.post", return_value=mock_resp_g) as mock_post:
+            resp_g = google.chat(
+                [ChatMessage(role="user", content="hello")],
+                options=ChatOptions(model="gemini-custom-flash"),
+            )
+            assert resp_g.text == "Google custom model answer"
+            called_url = mock_post.call_args[0][0]
+            assert "gemini-custom-flash:generateContent" in called_url
+
+    def test_local_llm_provider_adapter(self, monkeypatch):
+        from core.providers.local import LocalLLMProvider, LocalProvider
+
+        local_prov = LocalLLMProvider()
+        assert isinstance(local_prov, LLMProvider)
+        assert local_prov.key == "local"
+        assert local_prov.is_local is True
+        assert local_prov.is_authenticated is True
+        assert local_prov.is_reachable is True
+
+        monkeypatch.setattr(LocalProvider, "is_available", classmethod(lambda cls: True))
+        assert local_prov.is_ready() is True
+        val_ok, msg = local_prov.validate_key()
+        assert val_ok is True
+        assert msg == "OK"
+
+        models = local_prov.list_models()
+        assert len(models) == 1
+        assert models[0].id == "local"
+        assert models[0].catalog_source == CatalogSource.LIVE
+        assert models[0].speed_tier == SpeedTier.SLOW
+
+        monkeypatch.setattr(LocalProvider, "chat", classmethod(lambda cls, msgs, **kwargs: "Mock Local Output"))
+        chat_resp = local_prov.chat([ChatMessage(role="user", content="Hi")])
+        assert chat_resp.text == "Mock Local Output"
+        assert chat_resp.model_id == "local"
+        assert chat_resp.provider == "local"
+
+        def mock_stream(cls, msgs, **kwargs):
+            yield "token1 "
+            yield "token2"
+        monkeypatch.setattr(LocalProvider, "chat_stream", classmethod(mock_stream))
+        streamed = list(local_prov.stream([ChatMessage(role="user", content="Hi")]))
+        assert streamed == ["token1 ", "token2"]
+
+    def test_get_registry_default_providers_and_bridge_integration(self, monkeypatch, tmp_path):
+        import json
+        from app.bridge import Bridge
+        from core.providers.registry import get_registry
+        from core.security.secrets import SecretsVault
+
+        vault = SecretsVault(tmp_path / "secrets.enc")
+        monkeypatch.setattr("core.security.secrets.get_vault", lambda: vault)
+        reg = get_registry()
+
+        # Pre-registered providers exist
+        assert reg.get("local") is not None
+        assert reg.get("google") is not None
+        assert reg.get("anthropic") is not None
+        assert reg.get("openai") is not None
+
+        bridge = Bridge()
+        providers_json = bridge.get_providers()
+        providers_data = json.loads(providers_json)
+        local_entry = next(p for p in providers_data if p["key"] == "local")
+        assert local_entry["has_key"] is True  # local doesn't require an API key
+
+        google_entry = next(p for p in providers_data if p["key"] == "google")
+        assert google_entry["has_key"] is False
+
+        # Save key via bridge and verify registered instance is updated
+        bridge.save_provider_key("google", "test-new-google-key")
+        assert vault.retrieve_key("google") == "test-new-google-key"
+        reg_google = reg.get("google")
+        assert getattr(reg_google, "_api_key") == "test-new-google-key"
+
+    def test_orchestrator_system_prompt_and_agent_context_model_override(self, monkeypatch, tmp_path):
+        from core.agents.runtime import AgentContext
+        from core.providers.local import LocalProvider
+
+        settings = SettingsStore(tmp_path / "settings.json")
+        settings.set("system_prompt", "Custom Educator Prompt for testing.")
+        settings.set("router_preference", "local_only")
+        monkeypatch.setattr("core.settings.get_settings", lambda: settings)
+
+        # 1. Router preference local_only forces LOCAL_ONLY execution mode
+        captured_messages = []
+        def mock_local_chat(messages, **kwargs):
+            captured_messages.extend(messages)
+            return "Local reply"
+        monkeypatch.setattr(LocalProvider, "chat", mock_local_chat)
+
+        orch = Orchestrator()
+        res = orch.submit("Random query without agent match")
+        assert res.execution_mode == "local_only"
+        assert res.text == "Local reply"
+        # Verify custom system prompt was passed
+        sys_msgs = [m for m in captured_messages if m.get("role") == "system"]
+        assert len(sys_msgs) > 0
+        assert sys_msgs[0]["content"] == "Custom Educator Prompt for testing."
+
+        # 2. Verify model_override in AgentContext
+        from core.agents.registry import AgentResponse, agent_registry
+
+        @agent_registry.register(
+            name="TestContextAgent",
+            triggers=["inspect context"],
+        )
+        class TestContextAgent:
+            def process(self, context):
+                return AgentResponse(text=f"Override: {context.model_override}", agent_name="TestContextAgent")
+
+        res_agent = orch.submit(
+            "inspect context please",
+            options=TurnOptions(model_override="local"),
+        )
+        assert "Override: local" in res_agent.text

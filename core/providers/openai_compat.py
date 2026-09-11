@@ -225,9 +225,11 @@ class OpenAICompatibleProvider(LLMProvider):
         if opts.json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        # Use first available model if none specified
+        # Use requested model, first available, or default
         models = self.list_models()
-        if models:
+        if getattr(opts, "model", None):
+            payload["model"] = opts.model
+        elif models:
             payload["model"] = models[0].id
         else:
             payload["model"] = "gpt-4o-mini"
@@ -284,7 +286,9 @@ class OpenAICompatibleProvider(LLMProvider):
             payload["response_format"] = {"type": "json_object"}
 
         models = self.list_models()
-        if models:
+        if getattr(opts, "model", None):
+            payload["model"] = opts.model
+        elif models:
             payload["model"] = models[0].id
         else:
             payload["model"] = "gpt-4o-mini"

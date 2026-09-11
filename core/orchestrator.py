@@ -88,7 +88,10 @@ def _get_execution_mode() -> ExecutionMode:
     """Read the current privacy/execution mode from settings."""
     try:
         from core.settings import get_settings
-        mode_str = get_settings().get("privacy_mode", "local_only")
+        settings = get_settings()
+        if settings.get("router_preference") == "local_only":
+            return ExecutionMode.LOCAL_ONLY
+        mode_str = settings.get("privacy_mode", "local_only")
         return ExecutionMode(mode_str)
     except (ValueError, Exception):
         # Default to safest mode
@@ -393,6 +396,7 @@ class Orchestrator:
                 session_id=session_id,
                 user_message=user_message,
                 model_tier=opts.forced_tier or "local",
+                model_override=opts.model_override,
                 history=conv.get_messages_for_model()[-10:],
             )
 
@@ -444,8 +448,10 @@ class Orchestrator:
             provider, model_id, routing_reason = self._resolve_provider(opts, exec_mode)
             logger.info(f"Routing turn to {model_id} via {routing_reason}")
 
+            from core.settings import get_settings
+            sys_prompt = get_settings().get("system_prompt", "You are Gayatri AI, a helpful learning assistant.")
             messages = [
-                {"role": "system", "content": "You are Gayatri AI, a helpful learning assistant."},
+                {"role": "system", "content": sys_prompt},
             ]
             for msg in conv.get_recent(10):
                 if msg.role in ("user", "assistant"):
@@ -463,6 +469,7 @@ class Orchestrator:
                 from core.providers.base import ChatMessage, ChatOptions
                 chat_msgs = [ChatMessage(role=m["role"], content=m["content"]) for m in messages]
                 chat_opts = ChatOptions(
+                    model=model_id,
                     max_tokens=opts.max_tokens,
                     temperature=opts.temperature,
                 )
@@ -514,6 +521,7 @@ class Orchestrator:
                 session_id=session_id,
                 user_message=user_message,
                 model_tier=opts.forced_tier or "local",
+                model_override=opts.model_override,
                 history=conv.get_messages_for_model()[-10:],
             )
 
@@ -549,8 +557,10 @@ class Orchestrator:
             provider, model_id, routing_reason = self._resolve_provider(opts, exec_mode)
             logger.info(f"Routing stream turn to {model_id} via {routing_reason}")
 
+            from core.settings import get_settings
+            sys_prompt = get_settings().get("system_prompt", "You are Gayatri AI, a helpful learning assistant.")
             messages = [
-                {"role": "system", "content": "You are Gayatri AI, a helpful learning assistant."},
+                {"role": "system", "content": sys_prompt},
             ]
             for msg in conv.get_recent(10):
                 if msg.role in ("user", "assistant"):
@@ -568,6 +578,7 @@ class Orchestrator:
                 from core.providers.base import ChatMessage, ChatOptions
                 chat_msgs = [ChatMessage(role=m["role"], content=m["content"]) for m in messages]
                 chat_opts = ChatOptions(
+                    model=model_id,
                     max_tokens=opts.max_tokens,
                     temperature=opts.temperature,
                 )
