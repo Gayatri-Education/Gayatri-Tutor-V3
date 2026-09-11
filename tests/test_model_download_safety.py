@@ -286,3 +286,40 @@ class TestInstallationMetadataPersistence:
         assert health["available"] is False
         assert health["reason_code"] == "corrupt_file"
         assert "does not match verified installation metadata" in health["message"]
+
+    def test_install_hook_model_exists_checks_structural_health(self, tmp_path, monkeypatch):
+        from app.install_hook import InstallHook
+
+        model_path = tmp_path / "model.gguf"
+        monkeypatch.setattr(LocalProvider, "MODEL_PATH", model_path)
+        monkeypatch.setattr(InstallHook, "EXPECTED_MODEL", model_path)
+
+        hook = InstallHook()
+        # 1. Model does not exist
+        assert hook.model_exists() is False
+
+        # 2. Only .part file exists
+        part_path = tmp_path / "model.gguf.part"
+        part_path.write_bytes(b"x" * (2 * 1024 * 1024))
+        assert hook.model_exists() is False
+        part_path.unlink()
+
+        # 3. Model exists and healthy (mock llama_cpp)
+        model_path.write_bytes(b"x" * (2 * 1024 * 1024))
+        import sys
+        import types
+        fake_llama = types.ModuleType("llama_cpp")
+        monkeypatch.setitem(sys.modules, "llama_cpp", fake_llama)
+        assert hook.model_exists() is True
+
+        # 4. Model size mismatch with metadata
+        save_model_metadata(
+            dest_dir=tmp_path,
+            model_file="model.gguf",
+            digest="sha256:test",
+            namespace="DBERT",
+            name="DBERT_AI",
+            tag="latest",
+            size_bytes=500 * 1024 * 1024,
+        )
+        assert hook.model_exists() is False
