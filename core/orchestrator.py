@@ -121,7 +121,7 @@ def _inject_tutor_context(context: AgentContext, session_id: str,
             prerequisites_not_met = False
             for pid in prereqs:
                 pc = ldg.get_concept(pid)
-                if pc and ldg.get_mastery(pid) < 0.85:
+                if pc and (ldg.get_mastery(pid) or 0.0) < 0.85:
                     prerequisites_not_met = True
                     prereq_names.append(pc.name)
 
@@ -155,8 +155,8 @@ def _evaluate_tutor_response(session_id: str, user_message: str, agent_response:
                              tutor: Any = None, ldg: Any = None) -> None:
     """Evaluate student response and update LDG mastery.
 
-    Called after the Tutor agent responds.
-    Uses simple heuristics to detect correctness (no LLM-as-judge for privacy).
+    Called during the Tutor agent turn before generating response.
+    Uses heuristic detection with staleness, duplicate, and question checks (Audit #36 & #130).
     """
     tutor = tutor or _get_tutor_engine()
     ldg = ldg or _get_ldg()
@@ -168,32 +168,42 @@ def _evaluate_tutor_response(session_id: str, user_message: str, agent_response:
         if not ctx.current_concept_id:
             return
 
-        # If tutor was waiting for an answer, evaluate it
-        if ctx.waiting_for_answer:
-            # Simple heuristics for correctness detection
-            # (Avoids sending student answer back to model for privacy)
-            lower_msg = user_message.lower().strip()
+        # Staleness check (Audit #130): only evaluate if tutor was actively waiting
+        if not tutor.is_waiting_for_answer(session_id):
+            return
 
-            # Very short / confused responses likely wrong
-            if len(lower_msg) < 3:
-                correct = False
-            # Explicit "I don't know" / "help" / "?"
-            elif lower_msg in ("i don't know", "idk", "?", "help", "i'm stuck", "no idea"):
-                correct = False
-            # Affirmative responses
-            elif lower_msg.startswith(("yes", "yeah", "yep", "correct", "right", "i think", "it is")):
-                correct = True
-            # Negative responses
-            elif lower_msg.startswith(("no", "nope", "wrong", "incorrect", "not")):
-                correct = False
-            else:
-                correct = None  # uncertain, do not increase mastery
+        lower_msg = user_message.lower().strip()
 
-            mastery = tutor.record_student_response(session_id, correct=correct)
-            logger.info(
-                f"Evaluated response for {ctx.current_concept_name}: "
-                f"{'correct' if correct else 'incorrect'}, mastery={mastery:.3f}"
-            )
+        # Check if user is asking a clarification/question rather than giving a wrong answer
+        # e.g. "no, wait, what is a variable?" or "can you explain?"
+        is_clarification = (
+            "?" in lower_msg
+            or any(lower_msg.startswith(w) for w in ("what", "why", "how", "who", "when", "where", "can you", "could you", "explain", "help me understand"))
+            or "wait" in lower_msg
+        )
+
+        if is_clarification and lower_msg not in ("?", "help", "idk", "i don't know"):
+            correct = None  # Student asking a question / seeking clarification, do not penalize
+        elif len(lower_msg) < 3:
+            correct = False
+        elif lower_msg in ("i don't know", "idk", "?", "help", "i'm stuck", "no idea"):
+            correct = False
+        elif lower_msg.startswith(("yes", "yeah", "yep", "correct", "right", "i think", "it is")):
+            correct = True
+        elif lower_msg.startswith(("no", "nope", "wrong", "incorrect", "not")):
+            correct = False
+        else:
+            correct = None  # uncertain, do not increase mastery
+
+        mastery = tutor.record_student_response(
+            session_id,
+            correct=correct,
+            student_answer=user_message,
+        )
+        logger.info(
+            f"Evaluated response for {ctx.current_concept_name}: "
+            f"{'correct' if correct else 'incorrect' if correct is False else 'uncertain'}, mastery={mastery:.3f}"
+        )
     except Exception as exc:
         logger.error(f"Failed to evaluate tutor response: {exc}")
 
@@ -400,22 +410,34 @@ class Orchestrator:
                 history=conv.get_messages_for_model()[-10:],
             )
 
-            # Inject LDG context for Tutor agent
+            # Inject LDG context for Tutor agent (transactional, Audit #128)
+            tutor_txn = None
             if spec.name == "Tutor":
+                tutor_eng = self.get_tutor_engine()
+                if tutor_eng and hasattr(tutor_eng, "begin_transaction"):
+                    tutor_txn = tutor_eng.begin_transaction(session_id)
+
                 _evaluate_tutor_response(
                     session_id, user_message, "",
-                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                    tutor=tutor_eng, ldg=self.get_ldg()
                 )
                 _inject_tutor_context(
                     context, session_id,
-                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                    tutor=tutor_eng, ldg=self.get_ldg()
                 )
 
-            response = self.runtime.process(user_message, context, spec=spec)
+            try:
+                response = self.runtime.process(user_message, context, spec=spec)
+            except Exception as proc_exc:
+                if tutor_txn:
+                    tutor_txn.rollback()
+                raise proc_exc
 
             if response.text:
                 if getattr(response, "status", "SUCCESS") == "MODEL_UNAVAILABLE":
                     logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE")
+                    if tutor_txn:
+                        tutor_txn.rollback()
                     conv.add("user", user_message, agent_name=spec.name)
                     latency = (time.time() - start) * 1000
                     return TurnResult(
@@ -430,6 +452,8 @@ class Orchestrator:
 
                 if spec.name == "Tutor":
                     _post_tutor_response(session_id, tutor=self.get_tutor_engine())
+                    if tutor_txn:
+                        tutor_txn.commit()
                 conv.add("user", user_message, agent_name=spec.name)
                 conv.add("assistant", response.text, agent_name=spec.name)
                 latency = (time.time() - start) * 1000
@@ -525,27 +549,41 @@ class Orchestrator:
                 history=conv.get_messages_for_model()[-10:],
             )
 
+            tutor_txn = None
             if spec.name == "Tutor":
+                tutor_eng = self.get_tutor_engine()
+                if tutor_eng and hasattr(tutor_eng, "begin_transaction"):
+                    tutor_txn = tutor_eng.begin_transaction(session_id)
+
                 _evaluate_tutor_response(
                     session_id, user_message, "",
-                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                    tutor=tutor_eng, ldg=self.get_ldg()
                 )
                 _inject_tutor_context(
                     context, session_id,
-                    tutor=self.get_tutor_engine(), ldg=self.get_ldg()
+                    tutor=tutor_eng, ldg=self.get_ldg()
                 )
 
-            response = self.runtime.process(user_message, context, spec=spec)
+            try:
+                response = self.runtime.process(user_message, context, spec=spec)
+            except Exception as proc_exc:
+                if tutor_txn:
+                    tutor_txn.rollback()
+                raise proc_exc
 
             if response.text:
                 if getattr(response, "status", "SUCCESS") == "MODEL_UNAVAILABLE":
                     logger.warning(f"Agent {spec.name} reported MODEL_UNAVAILABLE in stream")
+                    if tutor_txn:
+                        tutor_txn.rollback()
                     conv.add("user", user_message, agent_name=spec.name)
                     yield response.text, True
                     return
 
                 if spec.name == "Tutor":
                     _post_tutor_response(session_id, tutor=self.get_tutor_engine())
+                    if tutor_txn:
+                        tutor_txn.commit()
                 conv.add("user", user_message, agent_name=spec.name)
                 conv.add("assistant", response.text, agent_name=spec.name)
                 yield response.text, True

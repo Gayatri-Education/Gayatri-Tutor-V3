@@ -3,15 +3,19 @@ from core.tutor_engine import TutorEngine, get_tutor_engine
 from core.knowledge_graph import LearningDependencyGraph
 from core.orchestrator import _evaluate_tutor_response
 
-def test_evaluate_tutor_response_mastery_update(monkeypatch):
-    ldg = LearningDependencyGraph()
+def test_evaluate_tutor_response_mastery_update(monkeypatch, tmp_path):
+    from core.session import SessionStore
+    store = SessionStore(tmp_path / "test_session.db")
+    monkeypatch.setattr("core.session.get_session_store", lambda: store)
+
+    ldg = LearningDependencyGraph(db_path=tmp_path / "test_ldg.db")
     # Add a mock concept
     conn = ldg._conn()
     conn.execute("INSERT OR REPLACE INTO ldg_concepts (id, name, subject) VALUES ('test_concept', 'Test Concept', 'test_subject')")
     conn.commit()
     conn.close()
 
-    tutor = get_tutor_engine(ldg)
+    tutor = TutorEngine(ldg)
     monkeypatch.setattr("core.orchestrator._get_tutor_engine", lambda: tutor)
     monkeypatch.setattr("core.orchestrator._get_ldg", lambda: ldg)
     # Set context
