@@ -51,6 +51,7 @@ def setup_logging(log_level: str = "INFO") -> logging.Logger:
     logger.addHandler(console)
 
     # File handler (rotating)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_file = LOG_DIR / "gayatri.log"
     file_handler = RotatingFileHandler(
         log_file, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT, encoding="utf-8"
