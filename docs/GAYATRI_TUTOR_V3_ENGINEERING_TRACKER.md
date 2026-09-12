@@ -2898,3 +2898,33 @@ pytest tests/test_training_split.py
 
 ### Remaining risk
 - If a developer adds a new block of generated examples without providing a source_family, they will all be grouped under "unknown" and sent to a single split, which might skew the ratios.
+
+## 2026-09-12 — Antigravity
+
+### Issue
+- ID: P0-004
+
+### Root cause
+- pp.bridge.Bridge.set_setting and core.settings.SettingsStore.set lacked strict allowlist enforcement for arbitrary keys. Specifically, core.settings deliberately bypassed schema validation for any key starting with custom_ or ext_. This allowed a compromised frontend to write unbounded or invalid data to the settings file.
+
+### Fix
+- Modified pp.bridge.facade.py to enforce that any incoming key must exist in _SETTINGS_SCHEMA before attempting any JSON parsing or disk saves.
+- Modified core.settings.validate_setting to entirely remove the custom_ and ext_ bypass, closing the loophole.
+- Also fixed a bug in core.logging_setup.py where RotatingFileHandler crashed if logs/ directory didn't exist.
+
+### Tests added/updated
+- Updated 	ests/test_settings_and_errors.py (changed 	est_namespaced_extension_keys_allowed to 	est_namespaced_extension_keys_rejected) to assert that the custom_ bypass is closed.
+
+### Validation
+`	ext
+pytest tests/
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- New extensions must now explicitly register their schemas in core/settings.py before they can save configurations, which is safer but slightly less flexible.

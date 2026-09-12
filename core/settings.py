@@ -63,13 +63,9 @@ def validate_setting(key: str, value: Any) -> Any:
     """Validate a setting key and its value against the schema and semantic ranges.
 
     Returns the sanitized / normalized value if valid.
-    Raises KeyError if key is unknown (unless prefixed with 'custom_' or 'ext_').
+    Raises KeyError if key is unknown.
     Raises ValueError or TypeError if the value violates type or range constraints.
     """
-    # Allow namespaced extensions (Audit #28)
-    if key.startswith("custom_") or key.startswith("ext_"):
-        return value
-
     if key not in _SETTINGS_SCHEMA:
         raise KeyError(
             f"Unknown setting key: '{key}'. Valid keys are: {sorted(_SETTINGS_SCHEMA.keys())}"
