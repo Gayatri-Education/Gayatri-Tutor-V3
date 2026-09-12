@@ -2293,8 +2293,8 @@ Do not use the phrase "production-ready" until:
 | PRIV-002 | NOT_STARTED | Tool-argument logging |
 | EDU-001 | VERIFIED | Missing Evidence-Calibrated Mastery |
 | EDU-002 | VERIFIED | No spaced reassessment or decay |
-| EDU-003 | NOT_STARTED | Prerequisite policy |
-| EDU-004 | NOT_STARTED | Curriculum abstraction |
+| EDU-003 | VERIFIED | Prerequisite policy |
+| EDU-004 | VERIFIED | Curriculum abstraction |
 | LDG-002 | NOT_STARTED | Recovery-mode prerequisite violation |
 | DB-002 | NOT_STARTED | Transparent corruption recovery |
 | DB-003 | NOT_STARTED | Schema migration |
