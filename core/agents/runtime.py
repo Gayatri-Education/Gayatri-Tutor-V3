@@ -140,7 +140,6 @@ class AgentRuntime:
     def __init__(self, registry=None, tools=None):
         self.registry = registry or agent_registry
         self.tools = tools or tool_registry
-        self._max_steps = 12
 
     def process(self, user_message: str, context: AgentContext, spec: AgentSpec | None = None) -> AgentResponse:
         """Process a user message through the agent pipeline.
@@ -197,26 +196,56 @@ class AgentRuntime:
             )
 
     def _agent_loop(self, agent, spec: AgentSpec, context: AgentContext) -> AgentResponse:
-        """Run the agent, handling tool calls in a loop with safety boundaries."""
+        """Run the agent, handling tool calls in a loop with safety boundaries defined by policy."""
         import time
-        from core.config import AGENT_TIMEOUT_S
 
         start_time = time.time()
         step_count = 0
+        total_tool_calls = 0
+        total_tokens = 0
+        
+        # Base policy from spec, overridden by global settings if present
+        from core.settings import get_settings
+        settings = get_settings()
+        
+        policy = spec.policy
+        max_steps = settings.get("agent.max_steps") or policy.max_steps
+        time_budget_s = settings.get("agent.time_budget_s") or policy.time_budget_s
+        token_budget = policy.token_budget
+        tool_budget = policy.tool_budget
 
         response = agent.process(context)
+        total_tokens += response.metadata.get("prompt_tokens", 0) + response.metadata.get("completion_tokens", 0)
 
         # Handle tool calls if the agent produced them
-        while response.tool_calls and step_count < self._max_steps:
-            # Enforce total agent turn execution timeout
-            if time.time() - start_time > AGENT_TIMEOUT_S:
-                logger.warning(f"Agent '{spec.name}' tool loop exceeded timeout of {AGENT_TIMEOUT_S}s")
+        while response.tool_calls and step_count < max_steps:
+            # Enforce time budget
+            if time.time() - start_time > time_budget_s:
+                logger.warning(f"Agent '{spec.name}' tool loop exceeded time budget of {time_budget_s}s")
+                break
+                
+            # Enforce token budget
+            if token_budget is not None and total_tokens > token_budget:
+                logger.warning(f"Agent '{spec.name}' tool loop exceeded token budget of {token_budget}")
+                break
+
+            # Enforce tool budget
+            if total_tool_calls >= tool_budget:
+                logger.warning(f"Agent '{spec.name}' tool loop exceeded tool budget of {tool_budget}")
                 break
 
             step_count += 1
             tool_results = []
+            
+            calls_to_make = response.tool_calls
+            if total_tool_calls + len(calls_to_make) > tool_budget:
+                allowed = tool_budget - total_tool_calls
+                logger.warning(f"Agent '{spec.name}' truncating {len(calls_to_make)} calls to {allowed} to fit budget")
+                calls_to_make = calls_to_make[:allowed]
+            
+            total_tool_calls += len(calls_to_make)
 
-            for tc in response.tool_calls:
+            for tc in calls_to_make:
                 tool_name = tc.get("tool", "")
                 tool_args = tc.get("args", {})
 
@@ -243,6 +272,7 @@ class AgentRuntime:
             # Feed tool results back to the agent
             context.metadata["tool_results"] = tool_results
             response = agent.process(context)
+            total_tokens += response.metadata.get("prompt_tokens", 0) + response.metadata.get("completion_tokens", 0)
 
         return response
 
