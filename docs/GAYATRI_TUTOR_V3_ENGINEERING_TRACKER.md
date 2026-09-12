@@ -2291,8 +2291,8 @@ Do not use the phrase "production-ready" until:
 | DESKTOP-004 | NOT_STARTED | Arbitrary settings keys |
 | PRIV-001 | NOT_STARTED | End-to-end privacy contract |
 | PRIV-002 | NOT_STARTED | Tool-argument logging |
-| EDU-001 | NOT_STARTED | Mastery calibration |
-| EDU-002 | NOT_STARTED | Spaced reassessment |
+| EDU-001 | VERIFIED | Missing Evidence-Calibrated Mastery |
+| EDU-002 | VERIFIED | No spaced reassessment or decay |
 | EDU-003 | NOT_STARTED | Prerequisite policy |
 | EDU-004 | NOT_STARTED | Curriculum abstraction |
 | LDG-002 | NOT_STARTED | Recovery-mode prerequisite violation |
