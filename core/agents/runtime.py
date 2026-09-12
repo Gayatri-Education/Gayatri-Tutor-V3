@@ -38,6 +38,18 @@ class ToolSpec:
     cancellation_token: bool = False  # Not actually used in spec directly
 
 
+def safe_log_args(kwargs: dict) -> dict:
+    """Redact sensitive arguments for logging (PRIV-002)."""
+    sensitive_keys = {'key', 'token', 'secret', 'password', 'content', 'answer', 'message'}
+    safe_kwargs = {}
+    for k, v in kwargs.items():
+        if any(sensitive in k.lower() for sensitive in sensitive_keys):
+            safe_kwargs[k] = "[REDACTED]"
+        else:
+            safe_kwargs[k] = v
+    return safe_kwargs
+
+
 class ToolRegistry:
     """Registry of available tools that agents can call."""
 
@@ -107,7 +119,8 @@ class ToolRegistry:
                     f"Argument '{arg_name}' for tool '{name}' exceeds maximum string length of {TOOL_ARG_MAX_STRING_LENGTH}"
                 )
 
-        logger.info(f"Tool call: {name}({kwargs})")
+        safe_kwargs = safe_log_args(kwargs)
+        logger.info(f"Tool call: {name}(args=[{', '.join(kwargs.keys())}]) - values: {safe_kwargs}")
 
         # Enforce tool execution timeout (Audit #79)
         if spec.timeout_s and spec.timeout_s > 0:
