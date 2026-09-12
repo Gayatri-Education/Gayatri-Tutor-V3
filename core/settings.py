@@ -30,6 +30,8 @@ _SETTINGS_SCHEMA: dict[str, type] = {
     "max_tokens": int,
     "temperature": float,
     "system_prompt": str,
+    "agent.max_steps": int,
+    "agent.time_budget_s": float,
 }
 
 # Semantic Range & Allowed Value Constants (Audit #27)

@@ -92,6 +92,8 @@ def is_negated_match(text_tokens: list[str], start_idx: int, window: int = 3) ->
     return any(token in _NEGATION_WORDS for token in check_window)
 
 
+from core.agents.policy import AgentPolicy
+
 @dataclass
 class AgentSpec:
     """Metadata for a registered agent."""
@@ -102,6 +104,7 @@ class AgentSpec:
     tools: list[str] = field(default_factory=list)
     tier: str = "local"
     description: str = ""
+    policy: AgentPolicy = field(default_factory=AgentPolicy)
 
     # Filled in by registry
     _class: type | None = field(default=None, repr=False, compare=False)
@@ -312,6 +315,7 @@ class AgentRegistry:
         tools: list[str] | None = None,
         tier: str = "local",
         description: str = "",
+        policy: AgentPolicy | None = None,
     ) -> Callable:
         """Decorator to register an agent class.
 
@@ -330,6 +334,7 @@ class AgentRegistry:
                 tools=tools or [],
                 tier=tier,
                 description=description,
+                policy=policy or AgentPolicy(),
             )
             spec._class = cls
             self._agents[name] = spec
