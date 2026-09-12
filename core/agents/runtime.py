@@ -85,13 +85,32 @@ class ToolRegistry:
                         f"got {type(kwargs[arg_name]).__name__}"
                     )
 
-        # Path traversal guard for file/path arguments (Audit #80)
+        # Path traversal guard for file/path arguments (Audit #80 & P0-005)
+        import os
         from pathlib import Path
+        from core.config import DATA_DIR
+        
+        allowed_dir = os.path.abspath(DATA_DIR)
+        
         for arg_name, arg_val in kwargs.items():
             if isinstance(arg_val, str) and any(k in arg_name.lower() for k in ("path", "file", "dir")):
+                # 1. Reject '..' entirely as a basic hygiene check
                 if ".." in Path(arg_val).parts:
                     raise PermissionError(
                         f"Path traversal detected in argument '{arg_name}': parent directory traversal ('..') is strictly prohibited."
+                    )
+                
+                # 2. Strict bounds check against allowed directory
+                target_path = os.path.abspath(os.path.join(allowed_dir, arg_val))
+                try:
+                    if os.path.commonpath([allowed_dir, target_path]) != allowed_dir:
+                        raise PermissionError(
+                            f"Path traversal detected in argument '{arg_name}': Path {target_path} escapes allowed workspace {allowed_dir}."
+                        )
+                except ValueError:
+                    # Different drives on Windows
+                    raise PermissionError(
+                        f"Path traversal detected in argument '{arg_name}': Path {target_path} is on a different drive than workspace {allowed_dir}."
                     )
 
         logger.info(f"Tool call: {name}({kwargs})")

@@ -134,6 +134,9 @@ def test_tool_path_traversal_blocked():
     with pytest.raises(PermissionError, match="Path traversal detected"):
         registry.call("read_file", file_path="C:\\safe\\..\\secret.txt")
 
+    with pytest.raises(PermissionError, match="Path traversal detected"):
+        registry.call("read_file", file_path="C:\\Windows\\System32\\config\\SAM")
+
     # Safe path succeeds
     assert registry.call("read_file", file_path="safe_doc.txt") == "read safe_doc.txt"
 

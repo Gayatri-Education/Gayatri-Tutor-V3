@@ -2898,3 +2898,33 @@ pytest tests/test_training_split.py
 
 ### Remaining risk
 - If a developer adds a new block of generated examples without providing a source_family, they will all be grouped under "unknown" and sent to a single split, which might skew the ratios.
+
+## 2026-09-12 — Antigravity
+
+### Issue
+- ID: P0-005
+
+### Root cause
+- The ToolRegistry.call method prevented basic relative path traversal (..) but failed to reject absolute paths pointing outside the workspace (e.g., C:\Windows\System32\config\SAM). This allowed any agent with file-reading tools (like the Document Analyzer) to exfiltrate arbitrary files from the user's host machine.
+
+### Fix
+- Modified core.agents.runtime.ToolRegistry to enforce a strict containment boundary using os.path.commonpath.
+- If an agent attempts to access a path that resolves to a location outside the core.config.DATA_DIR, a PermissionError is immediately raised.
+- This covers both relative breakouts and direct absolute path targeting.
+
+### Tests added/updated
+- Updated 	ests/test_tool_safety.py to assert that absolute paths aiming outside the allowed directory are successfully blocked.
+
+### Validation
+`	ext
+pytest tests/test_tool_safety.py
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- Tools that don't name their arguments containing path, ile, or dir will bypass this check, relying on the tool's own implementation for safety.
