@@ -399,8 +399,8 @@ class Bridge(QObject):
     def save_provider_key(self, provider_key: str, api_key: str):
         """Save a provider API key to the vault and update registered provider instance."""
         try:
-            from core.security.secrets import get_vault
             from core.providers.registry import get_registry
+            from core.security.secrets import get_vault
             vault = get_vault()
             clean_key = api_key.strip()
             if not clean_key:
