@@ -320,7 +320,7 @@ class TestPostAuditRegressionFixes:
 
         result = reg.dispatch("/dupcmd")
         # With conflicting exact 1.0 matches, must not pick arbitrarily; fallback to None
-        assert result is None
+        assert result.primary is None
 
     def test_agent_runtime_error_sanitization(self):
         """AgentRuntime sanitizes unexpected agent failure messages without leaking paths."""

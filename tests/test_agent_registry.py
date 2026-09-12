@@ -71,7 +71,7 @@ class TestAgentRegistry:
 
         result = reg.dispatch("/review my code")
         assert result is not None
-        spec, confidence = result
+        spec, confidence = result.primary.spec, result.primary.confidence
         assert spec.name == "Reviewer"
         assert confidence == 1.0
 
@@ -85,7 +85,7 @@ class TestAgentRegistry:
 
         result = reg.dispatch("/TUTOR help")
         assert result is not None
-        spec, _ = result
+        spec, _ = result.primary.spec, result.primary.confidence
         assert spec.name == "Tutor"
 
     def test_dispatch_trigger_match(self):
@@ -98,7 +98,7 @@ class TestAgentRegistry:
 
         result = reg.dispatch("can you check bugs in my script")
         assert result is not None
-        spec, confidence = result
+        spec, confidence = result.primary.spec, result.primary.confidence
         assert spec.name == "CodeHelper"
         assert confidence > 0.4
 
@@ -111,7 +111,7 @@ class TestAgentRegistry:
             def process(self, ctx): pass
 
         result = reg.dispatch("what is the weather")
-        assert result is None
+        assert result.primary is None
 
     def test_dispatch_low_confidence_rejected(self):
         """Low-confidence trigger matches are rejected."""
@@ -123,7 +123,7 @@ class TestAgentRegistry:
 
         # Only 1 of 3 trigger words matches
         result = reg.dispatch("linear equation")
-        assert result is None
+        assert result.primary is None
 
     def test_instantiate_agent(self):
         """Can create instances of registered agents."""

@@ -149,7 +149,7 @@ def test_orchestrator_forced_agent_dispatch():
 
     orch = Orchestrator()
     opts = TurnOptions(forced_agent="Code Reviewer")
-    spec, conf, reason = orch._resolve_agent("tell me a joke", opts)
+    spec, conf, reason, _ = orch._resolve_agent("tell me a joke", opts)
     assert spec is not None
     assert spec.name == "Code Reviewer"
     assert "forced_agent:Code Reviewer" in reason

@@ -31,7 +31,7 @@ class TestLayeredMatchingAndSemantics:
         class Reviewer:
             def process(self, ctx): pass
 
-        can_handle, score = reg.get("Reviewer").can_handle("/review my file.py")
+        can_handle, score, _ = reg.get("Reviewer").can_handle("/review my file.py")
         assert can_handle is True
         assert score == 1.0
 
@@ -45,12 +45,12 @@ class TestLayeredMatchingAndSemantics:
         spec = reg.get("Reviewer")
 
         # In-order exact phrase
-        ok, score1 = spec.can_handle("Can you review my code please?")
+        ok, score1, _ = spec.can_handle("Can you review my code please?")
         assert ok is True
         assert score1 >= 0.90
 
         # Scrambled words should NOT match exact phrase
-        ok2, score2 = spec.can_handle("Code is what I write, my review is pending")
+        ok2, score2, _ = spec.can_handle("Code is what I write, my review is pending")
         assert score2 < 0.60
         assert ok2 is False
 
@@ -62,11 +62,11 @@ class TestLayeredMatchingAndSemantics:
             def process(self, ctx): pass
 
         spec = reg.get("Summarizer")
-        ok, score = spec.can_handle("give me a tl;dr of this document")
+        ok, score, _ = spec.can_handle("give me a tl;dr of this document")
         assert ok is True
         assert score >= 0.85
 
-        ok2, score2 = spec.can_handle("give me a tl dr of this document")
+        ok2, score2, _ = spec.can_handle("give me a tl dr of this document")
         assert ok2 is True
         assert score2 >= 0.85
 
@@ -81,7 +81,7 @@ class TestLayeredMatchingAndSemantics:
         spec = reg.get("Reviewer")
 
         # Positive query triggers
-        ok_pos, score_pos = spec.can_handle("Please review my code")
+        ok_pos, score_pos, _ = spec.can_handle("Please review my code")
         assert ok_pos is True
         assert score_pos >= 0.90
 
@@ -92,7 +92,7 @@ class TestLayeredMatchingAndSemantics:
             "never review my code",
             "I ask you to avoid review my code",
         ]:
-            ok_neg, score_neg = spec.can_handle(negated)
+            ok_neg, score_neg, _ = spec.can_handle(negated)
             assert ok_neg is False, f"Failed on: {negated} with score {score_neg}"
             assert score_neg < 0.60
 
@@ -107,12 +107,12 @@ class TestLayeredMatchingAndSemantics:
         spec = reg.get("Compliance")
 
         # Exact match with negation
-        ok, score = spec.can_handle("Remember, this is not financial advice at all")
+        ok, score, _ = spec.can_handle("Remember, this is not financial advice at all")
         assert ok is True
         assert score >= 0.90
 
         # Scattered words with negation elsewhere must NOT match
-        ok_scat, score_scat = spec.can_handle("I need financial advice, not jokes")
+        ok_scat, score_scat, _ = spec.can_handle("I need financial advice, not jokes")
         assert ok_scat is False
         assert score_scat < 0.60
 
@@ -128,8 +128,8 @@ class TestLayeredMatchingAndSemantics:
         class PhraseAgent:
             def process(self, ctx): pass
 
-        _, score_word = reg.get("WordAgent").can_handle("review the financial budget")
-        _, score_phrase = reg.get("PhraseAgent").can_handle("review the financial budget")
+        _, score_word, _ = reg.get("WordAgent").can_handle("review the financial budget")
+        _, score_phrase, _ = reg.get("PhraseAgent").can_handle("review the financial budget")
 
         assert score_phrase > score_word
         assert score_phrase >= 0.85
@@ -152,7 +152,7 @@ class TestAmbiguityMatrixAndDisambiguation:
 
         result = reg.dispatch("please review my code")
         assert result is not None
-        spec, confidence = result
+        spec, confidence = result.primary.spec, result.primary.confidence
         assert spec.name == "CodeReviewer"
         assert confidence >= 0.90
 
@@ -170,7 +170,7 @@ class TestAmbiguityMatrixAndDisambiguation:
             def process(self, ctx): pass
 
         result = reg.dispatch("run analysis on this")
-        assert result is None, "Close/tied scores must not misroute to an arbitrary agent"
+        assert result.primary is None, "Close/tied scores must not misroute to an arbitrary agent"
 
     def test_default_agent_fallback_on_ambiguity(self):
         """When ambiguity occurs and default_agent is set, fall back to default agent."""
@@ -191,10 +191,7 @@ class TestAmbiguityMatrixAndDisambiguation:
         reg.set_default_agent("GeneralBot")
 
         result = reg.dispatch("run analysis on this")
-        assert result is not None
-        spec, conf = result
-        assert spec.name == "GeneralBot"
-        assert conf == 0.5
+        assert result.is_ambiguous
 
     def test_explicit_command_breaks_all_ties(self):
         """Explicit command has 1.0 confidence and always wins even if another agent has a phrase match."""
@@ -210,9 +207,8 @@ class TestAmbiguityMatrixAndDisambiguation:
 
         result = reg.dispatch("/tutor learn calculus")
         assert result is not None
-        spec, conf = result
-        assert spec.name == "CommandAgent"
-        assert conf == 1.0
+        assert result.primary.spec.name == "CommandAgent"
+        assert result.primary.confidence == 1.0
 
 
 class TestRealisticAmbiguityMatrix:
@@ -228,19 +224,17 @@ class TestRealisticAmbiguityMatrix:
         from core.agents.registry import agent_registry
 
         result = agent_registry.dispatch("what is the weather like in New York today?")
-        if result is not None:
-            spec, _ = result
-            assert spec.name != "Crop Advisory Agent"
+        if result.primary is not None:
+            assert result.primary.spec.name != "Crop Advisory Agent"
 
     def test_crop_weather_routes_to_crop_advisory(self):
         """Specific crop weather queries DO route to Crop Advisory Agent."""
         from core.agents.registry import agent_registry
 
         result = agent_registry.dispatch("give me crop weather advisory for wheat")
-        assert result is not None
-        spec, conf = result
-        assert spec.name == "Crop Advisory Agent"
-        assert conf >= 0.85
+        assert result.primary is not None
+        assert result.primary.spec.name == "Crop Advisory Agent"
+        assert result.primary.confidence >= 0.85
 
     def test_meeting_schedule_vs_personal_plan(self):
         """Disambiguate meeting booking vs personal schedule planning."""
@@ -249,13 +243,13 @@ class TestRealisticAmbiguityMatrix:
         # Meeting Scheduler has 'schedule meeting'
         res_meet = agent_registry.dispatch("can you schedule meeting with John at 3pm")
         assert res_meet is not None
-        spec_meet, _ = res_meet
+        spec_meet, _ = res_meet.primary.spec, res_meet.primary.confidence
         assert spec_meet.name == "Meeting Scheduler Agent"
 
         # Personal Assistant has 'plan my day'
         res_plan = agent_registry.dispatch("help me plan my day and organize tasks")
         assert res_plan is not None
-        spec_plan, _ = res_plan
+        spec_plan, _ = res_plan.primary.spec, res_plan.primary.confidence
         assert spec_plan.name == "Personal Assistant Agent"
 
     def test_government_budget_vs_financial_expenses(self):
@@ -265,11 +259,11 @@ class TestRealisticAmbiguityMatrix:
         # Policy Analyst has 'policy budget'
         res_pol = agent_registry.dispatch("explain the new policy budget allocation")
         assert res_pol is not None
-        spec_pol, _ = res_pol
+        spec_pol, _ = res_pol.primary.spec, res_pol.primary.confidence
         assert spec_pol.name == "Policy Analyst Agent"
 
         # Financial Agent has 'financial analysis', 'expenses', 'profit loss'
         res_fin = agent_registry.dispatch("financial analysis of our Q3 revenue and expenses")
         assert res_fin is not None
-        spec_fin, _ = res_fin
+        spec_fin, _ = res_fin.primary.spec, res_fin.primary.confidence
         assert spec_fin.name == "Financial Agent"

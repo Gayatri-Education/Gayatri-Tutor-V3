@@ -150,14 +150,23 @@ class AgentRuntime:
         3. Return the response
         """
         if spec is None:
-            dispatch = self.registry.dispatch(user_message)
-            if dispatch is None:
-                # No agent matched — return a default response
-                return AgentResponse(
-                    text=self._default_response(user_message),
-                    agent_name="default",
-                )
-            spec, confidence = dispatch
+            dispatch_result = self.registry.dispatch(user_message)
+            if dispatch_result.is_ambiguous:
+                alt_names = [m.spec.name for m in dispatch_result.alternatives[:2]]
+                text = f"Your request is ambiguous. Did you mean to use the {alt_names[0]} or {alt_names[1]}?"
+                return AgentResponse(text=text, agent_name="default", metadata={"ambiguous": True})
+                
+            if dispatch_result.primary is None:
+                default_spec = self.registry.get_default_agent()
+                if default_spec:
+                    spec = default_spec
+                else:
+                    return AgentResponse(
+                        text=self._default_response(user_message),
+                        agent_name="default",
+                    )
+            else:
+                spec = dispatch_result.primary.spec
 
         try:
             # 2. Instantiate and run the agent
