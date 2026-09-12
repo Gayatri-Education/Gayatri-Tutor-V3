@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -43,6 +43,9 @@ class Concept:
     error_count: int = 0
     last_practiced: str = ""
     subject: str = ""
+    minimum_mastery: float = 0.85
+    evidence_count: int = 3
+    assessment_types: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +58,9 @@ class Concept:
             "error_count": self.error_count,
             "last_practiced": self.last_practiced,
             "subject": self.subject,
+            "minimum_mastery": self.minimum_mastery,
+            "evidence_count": self.evidence_count,
+            "assessment_types": self.assessment_types,
         }
 
 
@@ -92,7 +98,10 @@ class LearningDependencyGraph:
                 exposure_count  INTEGER DEFAULT 0,
                 error_count     INTEGER DEFAULT 0,
                 last_practiced  TEXT DEFAULT '',
-                subject         TEXT DEFAULT ''
+                subject         TEXT DEFAULT '',
+                minimum_mastery REAL DEFAULT 0.85,
+                evidence_count  INTEGER DEFAULT 3,
+                assessment_types TEXT DEFAULT '[]'
             );
 
             CREATE TABLE IF NOT EXISTS ldg_prerequisites (
@@ -114,26 +123,58 @@ class LearningDependencyGraph:
     # ── Concept CRUD ─────────────────────────────────────────────────────
 
     def add_concept(self, concept_id: str, name: str, description: str = "",
-                    difficulty: float = 0.5, subject: str = "") -> Concept:
+                    difficulty: float = 0.5, subject: str = "",
+                    minimum_mastery: float = 0.85, evidence_count: int = 3,
+                    assessment_types: list[str] | None = None) -> Concept:
         """Add a new concept to the graph. Idempotent — updates if exists."""
         if difficulty < 0.0 or difficulty > 1.0:
             raise ValueError(f"Difficulty must be 0.0-1.0, got {difficulty}")
+            
+        import json
+        assess_str = json.dumps(assessment_types or [])
 
         conn = self._conn()
         conn.execute(
-            """INSERT INTO ldg_concepts (id, name, description, difficulty, subject)
-               VALUES (?, ?, ?, ?, ?)
+            """INSERT INTO ldg_concepts (id, name, description, difficulty, subject, minimum_mastery, evidence_count, assessment_types)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                    name = excluded.name,
                    description = excluded.description,
                    difficulty = excluded.difficulty,
-                   subject = excluded.subject""",
-            (concept_id, name, description, difficulty, subject),
+                   subject = excluded.subject,
+                   minimum_mastery = excluded.minimum_mastery,
+                   evidence_count = excluded.evidence_count,
+                   assessment_types = excluded.assessment_types""",
+            (concept_id, name, description, difficulty, subject, minimum_mastery, evidence_count, assess_str),
         )
         conn.commit()
         conn.close()
         logger.info(f"Added concept: {concept_id} ({name})")
         return self.get_concept(concept_id)
+
+    def _row_to_concept(self, row) -> Concept:
+        import json
+        assess_types = []
+        try:
+            if "assessment_types" in row.keys() and row["assessment_types"]:
+                assess_types = json.loads(row["assessment_types"])
+        except Exception:
+            pass
+
+        return Concept(
+            id=row["id"],
+            name=row["name"],
+            description=row["description"],
+            difficulty=row["difficulty"],
+            mastery=row["mastery"],
+            exposure_count=row["exposure_count"],
+            error_count=row["error_count"],
+            last_practiced=row["last_practiced"],
+            subject=row["subject"],
+            minimum_mastery=row["minimum_mastery"] if "minimum_mastery" in row.keys() else 0.85,
+            evidence_count=row["evidence_count"] if "evidence_count" in row.keys() else 3,
+            assessment_types=assess_types,
+        )
 
     def get_concept(self, concept_id: str) -> Concept | None:
         """Get a concept by ID."""
@@ -144,42 +185,19 @@ class LearningDependencyGraph:
         conn.close()
         if row is None:
             return None
-        return Concept(
-            id=row["id"],
-            name=row["name"],
-            description=row["description"],
-            difficulty=row["difficulty"],
-            mastery=row["mastery"],
-            exposure_count=row["exposure_count"],
-            error_count=row["error_count"],
-            last_practiced=row["last_practiced"],
-            subject=row["subject"],
-        )
+        return self._row_to_concept(row)
 
     def list_concepts(self, subject: str = "") -> list[Concept]:
         """List all concepts, optionally filtered by subject."""
         conn = self._conn()
         if subject:
             rows = conn.execute(
-                "SELECT * FROM ldg_concepts WHERE subject = ? ORDER BY name", (subject,)
+                "SELECT * FROM ldg_concepts WHERE subject = ?", (subject,)
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM ldg_concepts ORDER BY name").fetchall()
+            rows = conn.execute("SELECT * FROM ldg_concepts").fetchall()
         conn.close()
         return [self._row_to_concept(row) for row in rows]
-
-    def _row_to_concept(self, row: sqlite3.Row) -> Concept:
-        return Concept(
-            id=row["id"],
-            name=row["name"],
-            description=row["description"],
-            difficulty=row["difficulty"],
-            mastery=row["mastery"],
-            exposure_count=row["exposure_count"],
-            error_count=row["error_count"],
-            last_practiced=row["last_practiced"],
-            subject=row["subject"],
-        )
 
     # ── Prerequisite edges ───────────────────────────────────────────────
 
@@ -583,43 +601,8 @@ class LearningDependencyGraph:
 # ── Curriculum loader ────────────────────────────────────────────────────
 
 def load_curriculum(graph: LearningDependencyGraph, curriculum_path: str | Path) -> int:
-    """Load a curriculum JSON file into the graph.
-
-    Args:
-        graph: The LDG instance to populate
-        curriculum_path: Path to a JSON file with curriculum data
-
-    Returns:
-        Number of concepts loaded
-    """
-    import json
-    path = Path(curriculum_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Curriculum file not found: {path}")
-
-    with open(path) as f:
-        data = json.load(f)
-
-    concepts_added = 0
-    for concept_data in data.get("concepts", []):
-        graph.add_concept(
-            concept_id=concept_data["id"],
-            name=concept_data["name"],
-            description=concept_data.get("description", ""),
-            difficulty=concept_data.get("difficulty", 0.5),
-            subject=data.get("subject", ""),
-        )
-        concepts_added += 1
-
-    # Add prerequisite edges (after all concepts exist)
-    for concept_data in data.get("concepts", []):
-        concept_id = concept_data["id"]
-        for prereq_id in concept_data.get("prerequisites", []):
-            graph.add_prerequisite(concept_id, prereq_id)
-
-    subject_label = data.get("subject", "unknown")
-    logger.info(f"Loaded curriculum '{subject_label}': {concepts_added} concepts")
-    return concepts_added
+    from core.curriculum.loader import load_curriculum as _load
+    return _load(graph, curriculum_path)
 
 
 def get_ldg(db_path: str | Path | None = None) -> LearningDependencyGraph:
