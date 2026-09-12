@@ -31,6 +31,7 @@ class ToolSpec:
     description: str = ""
     argument_schema: dict[str, type] | None = None
     timeout_s: float = 30.0
+    cancellation_token: bool = False  # Not actually used in spec directly
 
 
 class ToolRegistry:
@@ -118,11 +119,24 @@ class ToolRegistry:
         # Enforce tool execution timeout (Audit #79)
         if spec.timeout_s and spec.timeout_s > 0:
             import concurrent.futures
+            from core.agents.policy import CancellationToken, set_cancellation_token
+            
+            token = CancellationToken()
+            
+            def run_with_token():
+                set_cancellation_token(token)
+                try:
+                    return spec.func(**kwargs)
+                finally:
+                    set_cancellation_token(None)
+                    
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             try:
-                future = executor.submit(spec.func, **kwargs)
+                future = executor.submit(run_with_token)
                 return future.result(timeout=spec.timeout_s)
             except concurrent.futures.TimeoutError as exc:
+                token.cancel()
+                logger.warning(f"Tool '{name}' timed out. Cancellation token set. Background thread may still be running if non-cooperative.")
                 raise TimeoutError(f"Tool '{name}' execution timed out after {spec.timeout_s}s") from exc
             finally:
                 executor.shutdown(wait=False, cancel_futures=True)

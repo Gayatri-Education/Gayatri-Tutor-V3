@@ -7,6 +7,9 @@ from core.agents.policy import AgentPolicy
 from core.settings import get_settings
 
 def test_step_limit_respected():
+    from core.settings import get_settings
+    get_settings()._settings.pop('agent.max_steps', None)
+    get_settings()._settings.pop('agent.time_budget_s', None)
     reg = AgentRegistry()
     tools = ToolRegistry()
     
@@ -39,6 +42,9 @@ def test_step_limit_respected():
     assert context.metadata.get('tool_results') is not None
 
 def test_time_budget_respected():
+    from core.settings import get_settings
+    get_settings()._settings.pop('agent.max_steps', None)
+    get_settings()._settings.pop('agent.time_budget_s', None)
     reg = AgentRegistry()
     tools = ToolRegistry()
     

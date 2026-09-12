@@ -23,4 +23,26 @@ All of these issues have been marked with **[HELP WANTED]**.
 
 Please read `development.md` for instructions on how to set up the project locally.
 
+### Writing Tools
+
+Tools that can run for a long time (e.g. network requests, heavy computation, data processing loops) must support **cooperative cancellation**. 
+Python threads cannot be forcefully killed. If your tool ignores a timeout, the thread will continue running in the background indefinitely.
+
+1. Decorate your tool with `@cooperative_tool` from `core.agents.policy`.
+2. Within loops or long-running sections, periodically call `check_cancelled()`.
+
+Example:
+```python
+from core.agents.policy import cooperative_tool, check_cancelled
+
+@tool_registry.register("long_running_task", timeout_s=10.0)
+@cooperative_tool
+def my_task():
+    for item in items:
+        check_cancelled()  # Raises CancelledError if timeout was reached
+        process(item)
+```
+
+Tools that are purely synchronous and very fast (e.g., simple file reads, math ops) do not need `@cooperative_tool`.
+
 We look forward to reviewing your Pull Requests!
