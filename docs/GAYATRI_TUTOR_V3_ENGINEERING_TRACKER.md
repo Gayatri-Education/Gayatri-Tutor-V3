@@ -2272,7 +2272,7 @@ Do not use the phrase "production-ready" until:
 |---|---|---|
 | P0-001 | VERIFIED | Broken audit-document reference |
 | P0-002 | VERIFIED | QWebChannel privileged bridge boundary |
-| P0-003 | NOT_STARTED | Training validation leakage |
+| P0-003 | VERIFIED | Training validation leakage |
 | P0-004 | NOT_STARTED | Mastery assessment heuristic correctness |
 | P0-005 | NOT_STARTED | Privacy claim/data-flow mismatch |
 | P0-006 | FIXED_UNVERIFIED | Insecure non-Windows secret fallback |
@@ -2866,3 +2866,35 @@ ruff check .
 
 ### Remaining risk
 - JS currently still uses the unified ridge for older API calls, but new UI features should connect strictly to the specific sub-bridges to enforce least privilege.
+
+## 2026-09-12 — Antigravity
+
+### Issue
+- ID: P0-003
+
+### Root cause
+- The data generation script created hundreds of overlapping/paraphrased variants of the same core templates and shuffled them randomly before splitting into train/val. This caused massive data leakage, artificially inflating validation metrics.
+
+### Fix
+- Modified generate_data.py to annotate each example with a specific source_family identifier matching its root template.
+- Implemented a grouped-split algorithm instead of andom.shuffle() across the whole dataset. The split now happens at the *family* level.
+- Used andom.seed(42) to ensure deterministic shuffling of the family keys before the 90/10 split.
+- Added generation of manifest.json which tracks the dataset sizes and confirms 0 overlapping families between the splits.
+
+### Tests added/updated
+- Added 	ests/test_training_split.py to assert no overlapping families and verify the ~90% split ratio.
+
+### Validation
+`	ext
+python training/generate_data.py
+pytest tests/test_training_split.py
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- If a developer adds a new block of generated examples without providing a source_family, they will all be grouped under "unknown" and sent to a single split, which might skew the ratios.

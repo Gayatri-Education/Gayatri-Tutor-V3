@@ -8,8 +8,8 @@ Outputs: training/processed/train.jsonl, val.jsonl
 """
 
 import json
-import random
 import os
+import random
 
 random.seed(42)
 
@@ -185,9 +185,10 @@ def generate_tutoring_examples():
     examples = []
 
     # 1. Direct Q&A pairs with different system prompts
-    for user_msg, assistant_msg in TUTORING_QA:
+    for idx, (user_msg, assistant_msg) in enumerate(TUTORING_QA):
         for system in random.sample(TUTOR_SYSTEMS, min(3, len(TUTOR_SYSTEMS))):
             examples.append({
+                "source_family": f"tutor_qa_{idx}",
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user", "content": user_msg},
@@ -201,6 +202,7 @@ def generate_tutoring_examples():
             for a in data["answers"]:
                 system = random.choice(TUTOR_SYSTEMS)
                 examples.append({
+                    "source_family": f"tutor_topic_{topic}",
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": q},
@@ -225,7 +227,7 @@ def generate_tutoring_examples():
         "Python basics", "debugging", "OOP", "data structures", "algorithms",
     ]
 
-    for _ in range(400):
+    for idx in range(400):
         follow_q, follow_answers = random.choice(follow_up_templates)
         answer = random.choice(follow_answers)
         if "{wrong}" in follow_q:
@@ -233,7 +235,10 @@ def generate_tutoring_examples():
             follow_q = follow_q.replace("{wrong}", random.choice(wrong_answers))
             answer = answer.replace("{wrong}", random.choice(wrong_answers))
 
+        # Group by the specific follow-up template structure to avoid leakage
+        template_idx = follow_up_templates.index(next(t for t in follow_up_templates if t[0] == follow_q or ("{wrong}" in t[0] and t[0].replace("{wrong}", "") in follow_q)))
         examples.append({
+            "source_family": f"tutor_followup_{template_idx}",
             "messages": [
                 {"role": "system", "content": random.choice(TUTOR_SYSTEMS)},
                 {"role": "user", "content": follow_q},
@@ -299,13 +304,14 @@ def generate_agent_examples():
         for trigger in triggers:
             task_descriptions = {
                 "code_reviewer": f"Review the following code for bugs, security issues, and best practices:\n{code_block}",
-                "code_mentor": f"Guide the user through learning about the topic they asked about. Use the Socratic method — ask questions rather than giving direct answers.",
-                "practice_generator": f"Generate 5 practice problems about the requested topic. Include difficulty levels and solutions.",
-                "examiner": f"Create a short assessment. Include 5 questions and an answer key. Cover the fundamentals.",
+                "code_mentor": "Guide the user through learning about the topic they asked about. Use the Socratic method — ask questions rather than giving direct answers.",
+                "practice_generator": "Generate 5 practice problems about the requested topic. Include difficulty levels and solutions.",
+                "examiner": "Create a short assessment. Include 5 questions and an answer key. Cover the fundamentals.",
                 "document_analyzer": "Read and summarize the uploaded document. Extract key points, main topics, and important details.",
                 "research_helper": "Search for current information about the topic. Summarize findings with sources.",
             }
             examples.append({
+                "source_family": f"agent_trigger_{agent_name}",
                 "messages": [
                     {"role": "system", "content": AGENT_SYSTEM},
                     {"role": "user", "content": trigger},
@@ -321,7 +327,7 @@ def generate_agent_examples():
     topics = ["Python loops", "JavaScript", "data structures", "SQL", "machine learning",
               "web development", "algorithms", "CSS", "React", "Docker", "Git", "APIs"]
 
-    for _ in range(600):
+    for idx in range(600):
         trigger = random.choice(list(AGENT_TRIGGERS.keys()))
         agent_name = trigger
         user_msg = random.choice(AGENT_TRIGGERS[trigger])
@@ -337,6 +343,7 @@ def generate_agent_examples():
             "research_helper": f"Research {random.choice(topics)}. Summarize findings clearly with sources.",
         }
         examples.append({
+            "source_family": f"agent_dispatch_{agent_name}",
             "messages": [
                 {"role": "system", "content": AGENT_SYSTEM},
                 {"role": "user", "content": user_msg},
@@ -363,8 +370,9 @@ def generate_agent_examples():
         ("What is an API?", "An API (Application Programming Interface) is a way for two programs to communicate. Like a waiter in a restaurant — you tell them what you want, they bring it from the kitchen."),
     ]
 
-    for q, a in direct_qas:
+    for idx, (q, a) in enumerate(direct_qas):
         examples.append({
+            "source_family": f"agent_direct_{idx}",
             "messages": [
                 {"role": "system", "content": AGENT_SYSTEM},
                 {"role": "user", "content": q},
@@ -412,13 +420,16 @@ def generate_conversations():
         ],
     ]
 
-    for conv in conv_templates:
+    for idx, conv in enumerate(conv_templates):
         messages = []
         for role, content in conv:
             messages.append({"role": role, "content": content})
         # Wrap with a random system prompt
         system = random.choice(TUTOR_SYSTEMS)
-        conversations.append({"messages": [{"role": "system", "content": system}] + messages})
+        conversations.append({
+            "source_family": f"conv_{idx}",
+            "messages": [{"role": "system", "content": system}] + messages
+        })
 
     return conversations
 
@@ -426,6 +437,7 @@ def generate_conversations():
 # ──────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────
+
 
 def main():
     output_dir = os.path.dirname(os.path.abspath(__file__))
@@ -445,30 +457,64 @@ def main():
     print(f"  {len(convs)} conversations")
 
     all_data = tutoring + agent + convs
-    random.shuffle(all_data)
     total = len(all_data)
     print(f"Total: {total} examples")
 
-    # Split 90/10
-    split = int(total * 0.9)
-    train_data = all_data[:split]
-    val_data = all_data[split:]
+    # Group by source_family
+    families = {}
+    for item in all_data:
+        family = item.get("source_family", "unknown")
+        families.setdefault(family, []).append(item)
+
+    # Shuffle families securely
+    family_keys = list(families.keys())
+    random.seed(42)
+    random.shuffle(family_keys)
+
+    # Split 90/10 by families
+    train_data = []
+    val_data = []
+    target_train = int(total * 0.9)
+
+    for fk in family_keys:
+        if len(train_data) < target_train:
+            train_data.extend(families[fk])
+        else:
+            val_data.extend(families[fk])
+
+    # Remove source_family before saving, but we can write manifest
+    def strip_family(d):
+        return {"messages": d["messages"]}
 
     train_path = os.path.join(data_dir, "train.jsonl")
     val_path = os.path.join(data_dir, "val.jsonl")
+    manifest_path = os.path.join(data_dir, "manifest.json")
 
     with open(train_path, "w", encoding="utf-8") as f:
         for item in train_data:
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            f.write(json.dumps(strip_family(item), ensure_ascii=False) + "\n")
 
     with open(val_path, "w", encoding="utf-8") as f:
         for item in val_data:
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            f.write(json.dumps(strip_family(item), ensure_ascii=False) + "\n")
 
-    print(f"\nWrote {len(train_data)} training examples to {train_path}")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "total_examples": total,
+            "train_examples": len(train_data),
+            "val_examples": len(val_data),
+            "total_families": len(families),
+            "train_families": sum(1 for fk in family_keys if families[fk][0] in train_data),
+            "val_families": sum(1 for fk in family_keys if families[fk][0] in val_data),
+            "split_ratio": len(train_data) / total
+        }, f, indent=2)
+
+    print(f"\\nWrote {len(train_data)} training examples to {train_path}")
     print(f"Wrote {len(val_data)} validation examples to {val_path}")
-    print("\nDataset ready for Colab training!")
+    print(f"Wrote manifest to {manifest_path}")
+    print("\\nDataset ready for Colab training!")
 
 
 if __name__ == "__main__":
     main()
+
