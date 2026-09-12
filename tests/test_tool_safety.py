@@ -122,19 +122,23 @@ def test_tool_execution_timeout():
 
 def test_tool_path_traversal_blocked():
     """Audit #80: Path traversal in tool arguments is rejected."""
+    from core.agents.runtime import ToolRegistry, FileToolInput
     registry = ToolRegistry()
 
-    @registry.register(name="read_file")
+    class ReadFileModel(FileToolInput):
+        file_path: str
+
+    @registry.register(name="read_file", input_model=ReadFileModel)
     def read_file(file_path: str):
         return f"read {file_path}"
 
-    with pytest.raises(PermissionError, match="Path traversal detected"):
+    with pytest.raises(TypeError, match="Path traversal detected"):
         registry.call("read_file", file_path="../../etc/passwd")
 
-    with pytest.raises(PermissionError, match="Path traversal detected"):
+    with pytest.raises(TypeError, match="Path traversal detected"):
         registry.call("read_file", file_path="C:\\safe\\..\\secret.txt")
 
-    with pytest.raises(PermissionError, match="Path traversal detected"):
+    with pytest.raises(TypeError, match="Path traversal detected"):
         registry.call("read_file", file_path="C:\\Windows\\System32\\config\\SAM")
 
     # Safe path succeeds

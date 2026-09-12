@@ -74,6 +74,7 @@ DEFAULT_TOP_K: int = 40
 
 MAX_AGENT_STEPS: int = 12       # max tool-call iterations per turn
 AGENT_TIMEOUT_S: int = 60       # max time for agent to complete
+TOOL_ARG_MAX_STRING_LENGTH: int = 4096  # max string length for tool arguments
 
 
 # ── Security ───────────────────────────────────────────────────────────
