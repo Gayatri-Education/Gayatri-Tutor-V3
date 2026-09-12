@@ -2282,7 +2282,7 @@ Do not use the phrase "production-ready" until:
 | ID | Status | Area |
 |---|---|---|
 | AGENT-001 | VERIFIED | Heuristic intent routing |
-| AGENT-002 | NOT_STARTED | Hardcoded agent budget |
+| AGENT-002 | VERIFIED | Hardcoded agent budget |
 | AGENT-003 | NOT_STARTED | Tool timeout doesn't guarantee termination |
 | AGENT-004 | NOT_STARTED | Weak tool schemas |
 | DESKTOP-001 | NOT_STARTED | Navigation/bridge hardening |
