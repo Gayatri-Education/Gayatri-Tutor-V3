@@ -2166,7 +2166,7 @@ Refactor only after P0/P1 behavior is stable.
 [ ] P0-003 fix training validation leakage
 [ ] P0-004 replace mastery heuristics
 [ ] P0-005 formalize privacy claims + privacy flow
-[ ] P0-006 remove production-insecure secret fallback
+[x] P0-006 remove production-insecure secret fallback
 [ ] DESKTOP-003 remove temporary provider-key mutation
 [ ] DESKTOP-004 reject unknown settings
 ```
@@ -2275,7 +2275,7 @@ Do not use the phrase "production-ready" until:
 | P0-003 | VERIFIED | Training validation leakage |
 | P0-004 | NOT_STARTED | Mastery assessment heuristic correctness |
 | P0-005 | NOT_STARTED | Privacy claim/data-flow mismatch |
-| P0-006 | FIXED_UNVERIFIED | Insecure non-Windows secret fallback |
+| P0-006 | VERIFIED | Insecure non-Windows secret fallback |
 
 ## P1
 
@@ -2947,3 +2947,35 @@ pytest tests/
 ### Remaining risk
 - Tools that don't name their arguments containing path, ile, or dir will bypass this check, relying on the tool's own implementation for safety.
 - New extensions must now explicitly register their schemas in core/settings.py before they can save configurations, which is safer but slightly less flexible.
+
+## 2026-09-12 — Antigravity
+
+### Issue
+- ID: P0-006
+
+### Root cause
+- The secrets vault core.security.secrets.py fell back to a deliberately insecure ase64 implementation on non-Windows platforms (when ALLOW_INSECURE_SECRET_STORAGE was true). While labeled as development-only, shipping an easily bypassable plaintext-equivalent storage mechanism in production poses a severe exfiltration risk for API keys on non-Windows endpoints.
+
+### Fix
+- Replaced the ase64 fallback with a secure, standard symmetric encryption implementation using cryptography.fernet.Fernet.
+- The application now securely generates a local encryption key (stored with restricted  o600 permissions at DATA_DIR/.hmac_key) and transparently handles encryption and decryption on non-Windows platforms.
+- Completely removed the ALLOW_INSECURE_SECRET_STORAGE environment variable bypass.
+- Keys are no longer stored in an easily decodable format on any operating system.
+
+### Tests added/updated
+- Rewrote 	est_secrets_vault_fail_closed to 	est_secrets_vault_fernet_fallback which asserts that data is securely encrypted using Fernet on non-Windows systems, and verified it doesn't appear in plaintext.
+- Removed monkeypatches mimicking the legacy insecure bypass.
+
+### Validation
+`	ext
+pytest tests/test_secrets.py
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- On non-Windows platforms, the symmetric key DATA_DIR/.hmac_key is stored alongside the vault. While it has  o600 permissions, a malicious actor who gains user-level read access to DATA_DIR could theoretically acquire both the key and the vault. (This is standard for local unprivileged storage without a keychain, but weaker than Windows DPAPI).

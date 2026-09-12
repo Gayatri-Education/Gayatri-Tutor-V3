@@ -1,10 +1,9 @@
 """Gayatri AI — Secure secrets management.
 
-Stores API keys and other sensitive data using Windows DPAPI.
+Stores API keys and other sensitive data using Windows DPAPI,
+or Fernet symmetric encryption on non-Windows platforms.
 Keys are encrypted at rest and never appear in plaintext on disk
 or in logs.
-
-Falls back gracefully on non-Windows platforms (development/testing).
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ class SecretsVault:
     """Secure storage for API keys and secrets.
 
     Windows: Uses DPAPI (CryptProtectData/CryptUnprotectData) via ctypes.
-    Non-Windows: Falls back to base64 (development only — NOT secure).
+    Non-Windows: Uses Fernet symmetric encryption with a locally managed key.
 
     Keys are NEVER:
     - Stored in plaintext
@@ -39,27 +38,39 @@ class SecretsVault:
         import threading
         self._lock = threading.Lock()
 
+    def _get_fernet(self) -> "Fernet":
+        """Get or create the local Fernet key for non-Windows platforms."""
+        from cryptography.fernet import Fernet
+        from core.config import HMAC_KEY_PATH
+
+        if not HMAC_KEY_PATH.exists():
+            key = Fernet.generate_key()
+            HMAC_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(HMAC_KEY_PATH, "wb") as f:
+                f.write(key)
+            try:
+                os.chmod(HMAC_KEY_PATH, 0o600)
+            except Exception:
+                pass
+        with open(HMAC_KEY_PATH, "rb") as f:
+            key = f.read()
+        return Fernet(key)
+
     def _encrypt(self, plaintext: str) -> bytes:
         """Encrypt a string using platform-appropriate method."""
         if self._is_windows:
             return self._dpapi_encrypt(plaintext)
         else:
-            # Development fallback — NOT secure
-            if os.environ.get("ALLOW_INSECURE_SECRET_STORAGE", "").lower() != "true":
-                raise RuntimeError("Secure secret storage is not supported on this platform. Set ALLOW_INSECURE_SECRET_STORAGE=true to enable insecure base64 storage for development.")
-            logger.warning("DPAPI unavailable — using base64 encoding (dev only)")
-            import base64
-            return base64.b64encode(plaintext.encode("utf-8"))
+            fernet = self._get_fernet()
+            return fernet.encrypt(plaintext.encode("utf-8"))
 
     def _decrypt(self, ciphertext: bytes) -> str:
         """Decrypt bytes using platform-appropriate method."""
         if self._is_windows:
             return self._dpapi_decrypt(ciphertext)
         else:
-            if os.environ.get("ALLOW_INSECURE_SECRET_STORAGE", "").lower() != "true":
-                raise RuntimeError("Secure secret storage is not supported on this platform. Set ALLOW_INSECURE_SECRET_STORAGE=true to enable insecure base64 storage for development.")
-            import base64
-            return base64.b64decode(ciphertext).decode("utf-8")
+            fernet = self._get_fernet()
+            return fernet.decrypt(ciphertext).decode("utf-8")
 
     def _dpapi_encrypt(self, plaintext: str) -> bytes:
         """Encrypt using Windows DPAPI (current user scope)."""

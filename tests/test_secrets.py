@@ -4,24 +4,23 @@ import json
 from pathlib import Path
 from core.security.secrets import SecretsVault
 
-def test_secrets_vault_fail_closed(monkeypatch, tmp_path):
+def test_secrets_vault_fernet_fallback(tmp_path):
+    # Ensure non-Windows platforms use the secure Fernet fallback
     vault = SecretsVault(tmp_path / "secrets.enc")
     vault._is_windows = False
     
-    # Missing explicit opt-in
-    monkeypatch.delenv("ALLOW_INSECURE_SECRET_STORAGE", raising=False)
-    with pytest.raises(RuntimeError, match="Secure secret storage is not supported"):
-        vault.store_key("test_key", "test_val")
-        
-    # With explicit opt-in
-    monkeypatch.setenv("ALLOW_INSECURE_SECRET_STORAGE", "true")
+    # It should successfully store and retrieve using Fernet
     vault.store_key("test_key", "test_val")
     assert vault.retrieve_key("test_key") == "test_val"
 
-def test_secrets_vault_corrupt_entry(monkeypatch, tmp_path):
+    # Verify it is not stored in plaintext
+    with open(tmp_path / "secrets.enc", "rb") as f:
+        data = json.loads(f.read().decode("utf-8"))
+        assert "test_val" not in data["test_key"]
+
+def test_secrets_vault_corrupt_entry(tmp_path):
     vault = SecretsVault(tmp_path / "secrets.enc")
     vault._is_windows = False
-    monkeypatch.setenv("ALLOW_INSECURE_SECRET_STORAGE", "true")
     
     # Store multiple keys
     vault.store_key("key1", "val1")
