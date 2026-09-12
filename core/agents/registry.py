@@ -106,7 +106,7 @@ class AgentSpec:
     # Filled in by registry
     _class: type | None = field(default=None, repr=False, compare=False)
 
-    def can_handle(self, text: str) -> tuple[bool, float]:
+    def can_handle(self, text: str) -> tuple[bool, float, str]:
         """Check if this agent should handle the given text using layered matching.
 
         Layers:
@@ -122,7 +122,7 @@ class AgentSpec:
         - If trigger itself contains negation (e.g. 'not financial advice'),
           the negation must appear in-sequence.
 
-        Returns (should_handle, confidence).
+        Returns (should_handle, confidence, match_type).
         """
         text_lower = text.lower().strip()
 
@@ -133,14 +133,15 @@ class AgentSpec:
             if text_lower.startswith(cmd_prefix):
                 remainder = text_lower[len(cmd_prefix):]
                 if remainder == "" or remainder[0] in (" ", "\t", "\n"):
-                    return True, 1.0
+                    return True, 1.0, "COMMAND"
 
         norm_text = normalize_text(text)
         norm_tokens = norm_text.split()
         if not norm_tokens:
-            return False, 0.0
+            return False, 0.0, "NONE"
 
         best_score = 0.0
+        best_match_type = "NONE"
 
         for trigger in self.triggers:
             raw_trig = trigger.strip()
@@ -167,7 +168,9 @@ class AgentSpec:
                     continue  # Negated trigger action
 
                 score = 0.95 if is_multiword else 0.70
-                best_score = max(best_score, score)
+                if score > best_score:
+                    best_score = score
+                    best_match_type = "EXACT"
                 continue
 
             # Layer 3: Normalized Phrase Match
@@ -183,7 +186,9 @@ class AgentSpec:
                     continue  # Negated trigger action
 
                 score = 0.85 if is_multiword else 0.65
-                best_score = max(best_score, score)
+                if score > best_score:
+                    best_score = score
+                    best_match_type = "NORMALIZED"
                 continue
 
             # Layer 4: Ordered Subphrase / Token Sequence Match (>= 3 words)
@@ -209,7 +214,9 @@ class AgentSpec:
                     if ratio >= 0.75:
                         if not is_negated_match(norm_tokens, consec_idx, window=3):
                             score = 0.65 * ratio
-                            best_score = max(best_score, score)
+                            if score > best_score:
+                                best_score = score
+                                best_match_type = "PARTIAL"
                             continue
 
             # Layer 5: Token Overlap (penalized, unordered fallback)
@@ -223,10 +230,13 @@ class AgentSpec:
                         score = 0.55 * overlap_ratio
                     else:
                         score = 0.40 * overlap_ratio
-                    best_score = max(best_score, score)
+                    if score > best_score:
+                        best_score = score
+                        best_match_type = "WEAK"
 
         threshold = 0.60
-        return best_score >= threshold, best_score
+        return best_score >= threshold, best_score, best_match_type
+
 
 
 class ModelUnavailableError(Exception):
@@ -242,6 +252,19 @@ class AgentResponse:
     tool_calls: list[dict] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
     status: str = "SUCCESS"  # SUCCESS | MODEL_UNAVAILABLE | ERROR
+
+@dataclass
+class IntentMatch:
+    spec: AgentSpec
+    confidence: float
+    match_type: str
+
+@dataclass
+class DispatchResult:
+    primary: IntentMatch | None
+    alternatives: list[IntentMatch]
+    is_ambiguous: bool
+    is_multi_intent: bool
 
 
 class AgentRegistry:
@@ -342,24 +365,25 @@ class AgentRegistry:
             cmds.extend(spec.commands)
         return sorted(cmds)
 
-    def dispatch(self, text: str) -> tuple[AgentSpec, float] | None:
+    def dispatch(self, text: str) -> DispatchResult:
         """Find the best agent for the given text.
 
         Layered matching & disambiguation:
         1. Explicit command check (priority 1.0)
         2. Candidate evaluation with layered matching confidence
-        3. Ambiguity margin and tie handling:
-           - If best candidate is command (1.0), it wins unconditionally.
-           - If top candidate and runner-up are within ambiguity_margin (< 0.10),
-             or tied, routing is deemed ambiguous and falls back to default agent or None.
-           - Otherwise, top candidate is dispatched.
+        3. Ambiguity margin and tie handling
+        4. Multi-intent detection ("and then", "also")
 
-        Returns (AgentSpec, confidence) or None if no agent matches or ambiguous.
+        Returns DispatchResult.
         """
         text_lower = text.lower().strip()
+        
+        # Check for multi-intent
+        multi_intent_separators = [" and then ", " also ", " after that "]
+        is_multi_intent = any(sep in text_lower for sep in multi_intent_separators)
 
         # 1. Explicit command check (priority 1.0)
-        command_matches: list[tuple[AgentSpec, str]] = []
+        command_matches: list[IntentMatch] = []
         for spec in self._agents.values():
             for cmd in spec.commands:
                 cmd_lower = cmd.lower().lstrip("/")
@@ -367,65 +391,54 @@ class AgentRegistry:
                 if text_lower.startswith(cmd_prefix):
                     remainder = text_lower[len(cmd_prefix):]
                     if remainder == "" or remainder[0] in (" ", "\t", "\n"):
-                        command_matches.append((spec, cmd))
+                        command_matches.append(IntentMatch(spec=spec, confidence=1.0, match_type="COMMAND"))
                         break
 
         if len(command_matches) == 1:
-            spec, cmd = command_matches[0]
-            logger.info(f"Dispatched via explicit command '{cmd}' to '{spec.name}' (confidence: 1.0)")
-            return spec, 1.0
+            match = command_matches[0]
+            logger.info(f"Dispatched via explicit command to '{match.spec.name}' (confidence: 1.0)")
+            return DispatchResult(primary=match, alternatives=[], is_ambiguous=False, is_multi_intent=is_multi_intent)
         elif len(command_matches) > 1:
-            names = [s.name for s, _ in command_matches]
-            logger.warning(f"Ambiguous explicit command matches multiple agents: {names}")
-            default = self.get_default_agent()
-            if default:
-                return default, 0.5
-            return None
+            logger.warning(f"Ambiguous explicit command matches multiple agents")
+            return DispatchResult(primary=None, alternatives=command_matches, is_ambiguous=True, is_multi_intent=is_multi_intent)
 
         # 2. Evaluate all agents
-        candidates: list[tuple[AgentSpec, float]] = []
+        candidates: list[IntentMatch] = []
         for spec in self._agents.values():
-            can_handle, score = spec.can_handle(text)
+            can_handle, score, match_type = spec.can_handle(text)
             if can_handle and score >= self.min_confidence_threshold:
-                candidates.append((spec, score))
+                candidates.append(IntentMatch(spec=spec, confidence=score, match_type=match_type))
 
         if not candidates:
-            default = self.get_default_agent()
-            if default:
-                logger.info(f"No agent matched; falling back to default agent '{default.name}'")
-                return default, 0.5
             logger.info(f"No agent matched for: {text[:80]}")
-            return None
+            return DispatchResult(primary=None, alternatives=[], is_ambiguous=False, is_multi_intent=is_multi_intent)
 
         # Sort descending by score
-        candidates.sort(key=lambda x: x[1], reverse=True)
+        candidates.sort(key=lambda x: x.confidence, reverse=True)
 
         if len(candidates) == 1:
-            best_spec, best_score = candidates[0]
-            logger.info(f"Dispatched to '{best_spec.name}' (confidence: {best_score:.2f})")
-            return best_spec, best_score
+            best_match = candidates[0]
+            logger.info(f"Dispatched to '{best_match.spec.name}' (confidence: {best_match.confidence:.2f})")
+            return DispatchResult(primary=best_match, alternatives=[], is_ambiguous=False, is_multi_intent=is_multi_intent)
 
         # 3. Multiple candidates: check ambiguity margin and tie handling
-        best_spec, best_score = candidates[0]
-        second_spec, second_score = candidates[1]
+        best_match = candidates[0]
+        second_match = candidates[1]
 
-        if best_score == 1.0 and second_score < 1.0:
-            return best_spec, best_score
+        if best_match.confidence == 1.0 and second_match.confidence < 1.0:
+            return DispatchResult(primary=best_match, alternatives=candidates[1:], is_ambiguous=False, is_multi_intent=is_multi_intent)
 
-        score_diff = best_score - second_score
+        score_diff = best_match.confidence - second_match.confidence
         if score_diff < self.ambiguity_margin:
             logger.warning(
-                f"Ambiguous agent dispatch between '{best_spec.name}' ({best_score:.2f}) and "
-                f"'{second_spec.name}' ({second_score:.2f}) with margin {score_diff:.2f} < "
-                f"{self.ambiguity_margin}. Falling back to default/general."
+                f"Ambiguous agent dispatch between '{best_match.spec.name}' ({best_match.confidence:.2f}) and "
+                f"'{second_match.spec.name}' ({second_match.confidence:.2f}) with margin {score_diff:.2f} < "
+                f"{self.ambiguity_margin}."
             )
-            default = self.get_default_agent()
-            if default:
-                return default, 0.5
-            return None
+            return DispatchResult(primary=None, alternatives=candidates, is_ambiguous=True, is_multi_intent=is_multi_intent)
 
-        logger.info(f"Dispatched to '{best_spec.name}' (confidence: {best_score:.2f}, margin: {score_diff:.2f})")
-        return best_spec, best_score
+        logger.info(f"Dispatched to '{best_match.spec.name}' (confidence: {best_match.confidence:.2f}, margin: {score_diff:.2f})")
+        return DispatchResult(primary=best_match, alternatives=candidates[1:], is_ambiguous=False, is_multi_intent=is_multi_intent)
 
     def instantiate(self, name: str, **kwargs) -> Any:
         """Create an instance of an agent by name."""

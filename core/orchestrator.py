@@ -297,7 +297,7 @@ class Orchestrator:
             spec = self.registry.get(opts.forced_agent)
             if spec is not None:
                 logger.info(f"Forced agent dispatch: {spec.name}")
-                return spec, 1.0, f"forced_agent:{spec.name}"
+                return spec, 1.0, f"forced_agent:{spec.name}", None
             logger.warning(f"Forced agent '{opts.forced_agent}' not found; checking task_type / auto-dispatch.")
 
         if opts.task_type and opts.task_type.lower() != "auto":
@@ -314,13 +314,16 @@ class Orchestrator:
             spec = self.registry.get(agent_name)
             if spec is not None:
                 logger.info(f"Task type forced agent dispatch: {spec.name} for task '{opts.task_type}'")
-                return spec, 1.0, f"task_type:{opts.task_type}"
+                return spec, 1.0, f"task_type:{opts.task_type}", None
 
-        dispatch = self.registry.dispatch(user_message)
-        if dispatch is not None:
-            spec, confidence = dispatch
-            return spec, confidence, f"agent_dispatch:{spec.name}:{confidence:.2f}"
-        return None
+        dispatch_result = self.registry.dispatch(user_message)
+        
+        if dispatch_result.primary is not None:
+            spec = dispatch_result.primary.spec
+            confidence = dispatch_result.primary.confidence
+            return spec, confidence, f"agent_dispatch:{spec.name}:{confidence:.2f}", dispatch_result
+            
+        return None, 0.0, "no_agent", dispatch_result
 
     def _resolve_provider(self, opts: TurnOptions, exec_mode: ExecutionMode) -> tuple[Any, str, str]:
         """Resolve LLM provider and model based on model_override, forced_tier, and privacy mode.
@@ -408,10 +411,21 @@ class Orchestrator:
         conv = self._get_conversation(session_id)
 
         # 1. Try agent dispatch
-        dispatch = self._resolve_agent(user_message, opts)
+        spec, confidence, agent_routing_reason, dispatch_result = self._resolve_agent(user_message, opts)
 
-        if dispatch is not None:
-            spec, confidence, agent_routing_reason = dispatch
+        if dispatch_result and dispatch_result.is_ambiguous:
+            alt_names = [m.spec.name for m in dispatch_result.alternatives[:2]]
+            ans = f"Your request is ambiguous. Did you mean to use the {alt_names[0]} or {alt_names[1]}?"
+            conv.add_message(Message(role="assistant", content=ans))
+            return TurnResult(
+                response_text=ans,
+                agent_name="default",
+                model_id="none",
+                status="SUCCESS",
+                duration_s=time.time() - start,
+            )
+
+        if spec is not None:
             logger.info(f"Agent dispatch: {spec.name} (confidence: {confidence:.2f})")
 
             context = AgentContext(
@@ -567,10 +581,17 @@ class Orchestrator:
         
         conv = self._get_conversation(session_id)
 
-        dispatch = self._resolve_agent(user_message, opts)
+        dispatch_result_tuple = self._resolve_agent(user_message, opts)
+        spec, confidence, agent_routing_reason, dispatch_result = dispatch_result_tuple
 
-        if dispatch is not None:
-            spec, confidence, agent_routing_reason = dispatch
+        if dispatch_result and dispatch_result.is_ambiguous:
+            alt_names = [m.spec.name for m in dispatch_result.alternatives[:2]]
+            ans = f"Your request is ambiguous. Did you mean to use the {alt_names[0]} or {alt_names[1]}?"
+            conv.add_message(Message(role="assistant", content=ans))
+            yield ans, True
+            return
+
+        if spec is not None:
             logger.info(f"Agent dispatch (stream): {spec.name} ({confidence:.2f})")
 
             context = AgentContext(
