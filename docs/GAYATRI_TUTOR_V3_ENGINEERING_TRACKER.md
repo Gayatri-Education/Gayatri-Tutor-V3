@@ -2290,12 +2290,12 @@ Do not use the phrase "production-ready" until:
 | DESKTOP-003 | NOT_STARTED | Temporary provider key mutation |
 | DESKTOP-004 | NOT_STARTED | Arbitrary settings keys |
 | PRIV-001 | NOT_STARTED | End-to-end privacy contract |
-| PRIV-002 | NOT_STARTED | Tool-argument logging |
+| PRIV-002 | VERIFIED | Tool-argument logging |
 | EDU-001 | VERIFIED | Missing Evidence-Calibrated Mastery |
 | EDU-002 | VERIFIED | No spaced reassessment or decay |
 | EDU-003 | VERIFIED | Prerequisite policy |
 | EDU-004 | VERIFIED | Curriculum abstraction |
-| LDG-002 | NOT_STARTED | Recovery-mode prerequisite violation |
+| LDG-002 | VERIFIED | Recovery-mode prerequisite violation |
 | DB-002 | NOT_STARTED | Transparent corruption recovery |
 | DB-003 | NOT_STARTED | Schema migration |
 | DB-004 | NOT_STARTED | Concurrency validation |
