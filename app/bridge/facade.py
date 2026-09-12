@@ -275,31 +275,33 @@ class Bridge(QObject):
             except (json.JSONDecodeError, ValueError):
                 parsed = value
 
+            if key not in _SETTINGS_SCHEMA:
+                raise ValueError(f"Unknown setting key: '{key}'")
+
             # Defensively coerce representation if schema expects primitive type
-            if key in _SETTINGS_SCHEMA:
-                expected_type = _SETTINGS_SCHEMA[key]
-                if expected_type is bool:
-                    if isinstance(parsed, bool):
+            expected_type = _SETTINGS_SCHEMA[key]
+            if expected_type is bool:
+                if isinstance(parsed, bool):
+                    pass
+                elif isinstance(parsed, str):
+                    if parsed.lower() in ("true", "1", "yes"):
+                        parsed = True
+                    elif parsed.lower() in ("false", "0", "no"):
+                        parsed = False
+                elif isinstance(parsed, (int, float)):
+                    parsed = bool(parsed)
+            elif expected_type is int:
+                if not isinstance(parsed, bool):
+                    try:
+                        parsed = int(parsed)
+                    except (ValueError, TypeError):
                         pass
-                    elif isinstance(parsed, str):
-                        if parsed.lower() in ("true", "1", "yes"):
-                            parsed = True
-                        elif parsed.lower() in ("false", "0", "no"):
-                            parsed = False
-                    elif isinstance(parsed, (int, float)):
-                        parsed = bool(parsed)
-                elif expected_type is int:
-                    if not isinstance(parsed, bool):
-                        try:
-                            parsed = int(parsed)
-                        except (ValueError, TypeError):
-                            pass
-                elif expected_type is float:
-                    if not isinstance(parsed, bool):
-                        try:
-                            parsed = float(parsed)
-                        except (ValueError, TypeError):
-                            pass
+            elif expected_type is float:
+                if not isinstance(parsed, bool):
+                    try:
+                        parsed = float(parsed)
+                    except (ValueError, TypeError):
+                        pass
 
             store.set(key, parsed)
             logger.debug(f"Setting: {key} = {parsed!r}")

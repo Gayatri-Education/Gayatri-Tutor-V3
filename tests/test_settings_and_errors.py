@@ -146,14 +146,15 @@ class TestSettingsUnknownKeysAndAtomicUpdates:
         with pytest.raises(KeyError, match="Unknown setting key: 'temp'"):
             store.set("temp", 0.5)  # Typo for temperature
 
-    def test_namespaced_extension_keys_allowed(self, tmp_path):
+    def test_namespaced_extension_keys_rejected(self, tmp_path):
+        # After P0-004, even custom_ and ext_ keys are rejected to prevent arbitrary overwrite
         store = SettingsStore(settings_path=tmp_path / "settings.json")
 
-        store.set("custom_plugin_flag", True)
-        assert store.get("custom_plugin_flag") is True
+        with pytest.raises(KeyError, match="Unknown setting key: 'custom_plugin_flag'"):
+            store.set("custom_plugin_flag", True)
 
-        store.set("ext_theme_variant", "nordic")
-        assert store.get("ext_theme_variant") == "nordic"
+        with pytest.raises(KeyError, match="Unknown setting key: 'ext_theme_variant'"):
+            store.set("ext_theme_variant", "nordic")
 
     def test_atomic_update_failure_does_not_corrupt_settings(self, tmp_path):
         store = SettingsStore(settings_path=tmp_path / "settings.json")
