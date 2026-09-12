@@ -2300,9 +2300,9 @@ Do not use the phrase "production-ready" until:
 | DB-003 | NOT_STARTED | Schema migration |
 | DB-004 | NOT_STARTED | Concurrency validation |
 | TRAIN-001 | NOT_STARTED | Synthetic-data dependence |
-| TRAIN-002 | NOT_STARTED | Near-duplicate leakage |
-| TRAIN-003 | NOT_STARTED | Dataset versioning |
-| TRAIN-004 | NOT_STARTED | Deterministic seed |
+| TRAIN-002 | NOT_STARTED | Dataset overlap check |
+| TRAIN-003 | VERIFIED | Lack of dataset versioning |
+| TRAIN-004 | VERIFIED | Dataset generation non-deterministic \|seed \| |
 | TRAIN-005 | NOT_STARTED | Dataset quality validation |
 | TRAIN-006 | NOT_STARTED | Held-out educational benchmark |
 | TEST-001 | NOT_STARTED | Source-text assertions |

@@ -440,8 +440,21 @@ def generate_conversations():
 
 
 def main():
-    output_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(output_dir, "processed")
+    import argparse
+    from training.utils.manifest import build_manifest
+    
+    parser = argparse.ArgumentParser(description="Generate dataset for training")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for generation and splitting")
+    parser.add_argument("--output-dir", type=str, default=None, help="Directory to save dataset")
+    parser.add_argument("--version", type=str, default="1.0.0", help="Dataset version string")
+    args = parser.parse_args()
+
+    if args.output_dir:
+        data_dir = os.path.abspath(args.output_dir)
+    else:
+        output_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(output_dir, "processed")
+        
     os.makedirs(data_dir, exist_ok=True)
 
     print("Generating tutoring data...")
@@ -468,7 +481,7 @@ def main():
 
     # Shuffle families securely
     family_keys = list(families.keys())
-    random.seed(42)
+    random.seed(args.seed)
     random.shuffle(family_keys)
 
     # Split 90/10 by families
@@ -498,16 +511,20 @@ def main():
         for item in val_data:
             f.write(json.dumps(strip_family(item), ensure_ascii=False) + "\n")
 
+    stats = {
+        "total_examples": total,
+        "train_examples": len(train_data),
+        "val_examples": len(val_data),
+        "total_families": len(families),
+        "train_families": sum(1 for fk in family_keys if families[fk][0] in train_data),
+        "val_families": sum(1 for fk in family_keys if families[fk][0] in val_data),
+        "split_ratio": len(train_data) / total
+    }
+    
+    manifest = build_manifest(data_dir, args.seed, args.version, stats)
+
     with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "total_examples": total,
-            "train_examples": len(train_data),
-            "val_examples": len(val_data),
-            "total_families": len(families),
-            "train_families": sum(1 for fk in family_keys if families[fk][0] in train_data),
-            "val_families": sum(1 for fk in family_keys if families[fk][0] in val_data),
-            "split_ratio": len(train_data) / total
-        }, f, indent=2)
+        json.dump(manifest, f, indent=2)
 
     print(f"\\nWrote {len(train_data)} training examples to {train_path}")
     print(f"Wrote {len(val_data)} validation examples to {val_path}")
