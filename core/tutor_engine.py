@@ -11,10 +11,26 @@ import copy
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 logger = logging.getLogger("gayatri.tutor")
+
+class MasteryLevel(str, Enum):
+    INTRODUCED = "Introduced"
+    PRACTICING = "Practicing"
+    PROFICIENT = "Proficient"
+    MASTERED = "Mastered"
+
+def mastery_level(score: float) -> str:
+    if score >= 0.9:
+        return MasteryLevel.MASTERED.value
+    elif score >= 0.7:
+        return MasteryLevel.PROFICIENT.value
+    elif score >= 0.4:
+        return MasteryLevel.PRACTICING.value
+    return MasteryLevel.INTRODUCED.value
 
 
 @dataclass
@@ -30,6 +46,11 @@ class TutorContext:
     last_attempt_correct: bool | None = None
     last_interaction_time: float = 0.0
     last_student_answer: str = ""
+    attempts: int = 0
+    correct_count: int = 0
+    hint_used: bool = False
+    time_to_answer_s: float = 0.0
+    review_queue: list[str] = field(default_factory=list)
 
     def to_prompt_context(self) -> str:
         """Build a context string for the model system prompt."""
@@ -39,7 +60,8 @@ class TutorContext:
         lines = [
             f"Current teaching concept: {self.current_concept_name}",
             f"Description: {self.concept_description}",
-            f"Student mastery: {int(self.mastery * 100)}%",
+            f"Student mastery: {int(self.mastery * 100)}% ({mastery_level(self.mastery)})",
+            f"Attempts: {self.attempts}, Correct: {self.correct_count}",
         ]
 
         if self.waiting_for_answer:
@@ -189,13 +211,29 @@ class TutorEngine:
         """Get the next concept to teach, advancing from current if mastered."""
         with self._lock:
             ctx = self.get_or_create_context(session_id)
+
+            from core.tutor.decay import MasteryDecayScheduler
+            scheduler = MasteryDecayScheduler(self.ldg, self)
+            scheduler.apply_decay_and_queue(session_id)
+
             current_id = ctx.current_concept_id
 
             from core.config import LDG_MASTERY_THRESHOLD
             # If no current concept, or current is mastered or missing, get next
             mastery = self.ldg.get_mastery(current_id) if current_id else None
             if not current_id or mastery is None or mastery >= LDG_MASTERY_THRESHOLD:
-                next_concept = self.ldg.get_next_concept(ctx.subject)
+                # Check review queue first
+                next_concept = None
+                while ctx.review_queue:
+                    review_id = ctx.review_queue.pop(0)
+                    review_mastery = self.ldg.get_mastery(review_id)
+                    if review_mastery is not None and review_mastery < LDG_MASTERY_THRESHOLD:
+                        next_concept = self.ldg.get_concept(review_id)
+                        break
+                
+                if not next_concept:
+                    next_concept = self.ldg.get_next_concept(ctx.subject)
+                
                 if next_concept:
                     # Advance context
                     ctx.current_concept_id = next_concept.id
@@ -204,10 +242,18 @@ class TutorEngine:
                     ctx.mastery = self.ldg.get_mastery(next_concept.id) or 0.3
                     ctx.waiting_for_answer = False
                     ctx.last_response_type = "explain"
+                    ctx.attempts = 0
+                    ctx.correct_count = 0
+                    ctx.hint_used = False
+                    ctx.time_to_answer_s = 0.0
                     self.save_context(session_id)
                     logger.info(f"Advanced to concept: {next_concept.name}")
-
-            return self.ldg.get_concept(ctx.current_concept_id) if ctx.current_concept_id else None
+                    return next_concept
+                else:
+                    return None
+            else:
+                # Keep current
+                return self.ldg.get_concept(current_id) if current_id else None
 
     def record_student_response(self, session_id: str, correct: bool | None,
                                 confidence: float = 1.0,
@@ -218,8 +264,14 @@ class TutorEngine:
             if not ctx.current_concept_id:
                 return 0.0
 
-            # Audit #36: Check for duplicate identical submission within short window
             now = time.time()
+            if ctx.last_interaction_time > 0:
+                elapsed = now - ctx.last_interaction_time
+                ctx.time_to_answer_s = elapsed
+            else:
+                ctx.time_to_answer_s = 0.0
+
+            # Audit #36: Check for duplicate identical submission within short window
             clean_answer = student_answer.strip().lower()
             if clean_answer and clean_answer == ctx.last_student_answer.strip().lower():
                 if ctx.last_interaction_time > 0 and (now - ctx.last_interaction_time) < 10.0:
@@ -229,6 +281,10 @@ class TutorEngine:
             if correct is not None:
                 new_mastery = self.ldg.record_attempt(ctx.current_concept_id, correct, confidence)
                 ctx.mastery = new_mastery
+                ctx.last_attempt_correct = correct
+                ctx.attempts += 1
+                if correct:
+                    ctx.correct_count += 1
                 status = "correct" if correct else "incorrect"
                 logger.info(
                     f"Student {status} on {ctx.current_concept_name}: "
