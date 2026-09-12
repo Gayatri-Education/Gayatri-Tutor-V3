@@ -499,17 +499,73 @@ def main():
     def strip_family(d):
         return {"messages": d["messages"]}
 
+    def dedup_and_resolve(dataset):
+        unique = []
+        seen_contexts = {}
+        for item in dataset:
+            msgs = item['messages']
+            has_conflict = False
+            for i in range(len(msgs)):
+                if msgs[i].get('role') == 'assistant':
+                    ctx = json.dumps(msgs[:i], sort_keys=True)
+                    target = msgs[i].get('content')
+                    if ctx in seen_contexts and seen_contexts[ctx] != target:
+                        has_conflict = True
+                        break
+                    seen_contexts[ctx] = target
+            if not has_conflict:
+                unique.append(item)
+        
+        # Also remove exact duplicates globally just in case (though context dedup handles most)
+        final_unique = []
+        seen_sigs = set()
+        for item in unique:
+            sig = json.dumps(item['messages'], sort_keys=True)
+            if sig not in seen_sigs:
+                final_unique.append(item)
+                seen_sigs.add(sig)
+                
+        return final_unique
+
+    train_data_stripped = dedup_and_resolve([strip_family(item) for item in train_data])
+    val_data_stripped = dedup_and_resolve([strip_family(item) for item in val_data])
+
+    print("Validating datasets...")
+    from training.validators.dataset_validator import DatasetValidator
+    train_validator = DatasetValidator()
+    
+    train_errors = train_validator.validate_dataset(train_data_stripped)
+    if train_errors:
+        print(f"ERROR: Found {len(train_errors)} validation errors in training data:")
+        for e in train_errors[:10]:
+            print(f"  - {e}")
+        if len(train_errors) > 10:
+            print("  ... and more")
+        exit(1)
+        
+    val_validator = DatasetValidator()
+    val_errors = val_validator.validate_dataset(val_data_stripped)
+    if val_errors:
+        print(f"ERROR: Found {len(val_errors)} validation errors in validation data:")
+        for e in val_errors[:10]:
+            print(f"  - {e}")
+        if len(val_errors) > 10:
+            print("  ... and more")
+        exit(1)
+
+    print("Validation passed!")
+
     train_path = os.path.join(data_dir, "train.jsonl")
     val_path = os.path.join(data_dir, "val.jsonl")
     manifest_path = os.path.join(data_dir, "manifest.json")
 
     with open(train_path, "w", encoding="utf-8") as f:
-        for item in train_data:
-            f.write(json.dumps(strip_family(item), ensure_ascii=False) + "\n")
+        for item in train_data_stripped:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     with open(val_path, "w", encoding="utf-8") as f:
-        for item in val_data:
-            f.write(json.dumps(strip_family(item), ensure_ascii=False) + "\n")
+        for item in val_data_stripped:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     stats = {
         "total_examples": total,
