@@ -77,8 +77,6 @@ Please see the [LICENSE.md](LICENSE.md) file for the complete terms.
 
 ## 🤝 Contributing & Help Wanted
 
-We recently conducted a comprehensive audit and found several issues that need to be addressed. We are actively looking for open-source contributors on GitHub to help us fix them!
-
-Please see the [Comprehensive Audit Document](docs/GAYATRI_TUTOR_V3_ENGINEERING_TRACKER.md) for a full list of issues marked with **[HELP WANTED]**. 
+We are actively looking for open-source contributors on GitHub to help us fix issues and improve the project!
 
 To get started, read our [CONTRIBUTING.md](CONTRIBUTING.md) guide. We welcome all Pull Requests!

@@ -2815,8 +2815,7 @@ reproducible, maintainable local-first AI tutor.
 - README pointed to a non-existent path for the audit document.
 
 ### Fix
-- Moved the audit document to docs/GAYATRI_TUTOR_V3_ENGINEERING_TRACKER.md.
-- Updated the link in README.md to point to the correct location.
+- Kept the audit document locally in docs/GAYATRI_TUTOR_V3_ENGINEERING_TRACKER.md.`n- Removed the broken link from README.md entirely per user request.
 - Added a "How to update this tracker" heading.
 
 ### Tests added/updated
@@ -2835,3 +2834,4 @@ Test-Path docs/GAYATRI_TUTOR_V3_ENGINEERING_TRACKER.md
 
 ### Remaining risk
 - None
+
