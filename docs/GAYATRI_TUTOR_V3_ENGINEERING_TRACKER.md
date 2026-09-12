@@ -2304,7 +2304,7 @@ Do not use the phrase "production-ready" until:
 | TRAIN-003 | VERIFIED | Lack of dataset versioning |
 | TRAIN-004 | VERIFIED | Dataset generation non-deterministic \|seed \| |
 | TRAIN-005 | VERIFIED | Dataset quality validation |
-| TRAIN-006 | NOT_STARTED | Held-out educational benchmark |
+| TRAIN-006 | VERIFIED | Held-out educational benchmark |
 | TEST-001 | NOT_STARTED | Source-text assertions |
 | TEST-002 | NOT_STARTED | Placeholder regression test |
 | TEST-003 | NOT_STARTED | GUI/headless test separation |
