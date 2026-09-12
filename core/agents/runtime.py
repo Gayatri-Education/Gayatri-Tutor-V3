@@ -23,6 +23,9 @@ class AgentContext:
     metadata: dict = field(default_factory=dict)
 
 
+from pydantic import BaseModel, ValidationError, field_validator
+from core.config import DATA_DIR, TOOL_ARG_MAX_STRING_LENGTH
+
 @dataclass
 class ToolSpec:
     """Specification of a tool registered with ToolRegistry."""
@@ -30,6 +33,7 @@ class ToolSpec:
     func: Callable
     description: str = ""
     argument_schema: dict[str, type] | None = None
+    input_model: type[BaseModel] | None = None
     timeout_s: float = 30.0
     cancellation_token: bool = False  # Not actually used in spec directly
 
@@ -45,6 +49,7 @@ class ToolRegistry:
         name: str,
         description: str = "",
         argument_schema: dict[str, type] | None = None,
+        input_model: type[BaseModel] | None = None,
         timeout_s: float = 30.0,
         allow_replace: bool = False,
     ) -> Callable:
@@ -59,6 +64,7 @@ class ToolRegistry:
                 func=func,
                 description=description,
                 argument_schema=argument_schema,
+                input_model=input_model,
                 timeout_s=timeout_s,
             )
             logger.info(f"Registered tool: {name}")
@@ -77,8 +83,16 @@ class ToolRegistry:
         if spec is None:
             raise ValueError(f"Tool '{name}' not found. Available: {self.list_tools()}")
 
-        # Validate arguments against schema if defined
-        if spec.argument_schema:
+        # Pydantic validation (preferred)
+        if spec.input_model:
+            try:
+                parsed = spec.input_model(**kwargs)
+                kwargs = parsed.model_dump()
+            except ValidationError as exc:
+                raise TypeError(f"Validation failed for tool '{name}': {exc}")
+                
+        # Fallback argument schema validation
+        elif spec.argument_schema:
             for arg_name, expected_type in spec.argument_schema.items():
                 if arg_name in kwargs and not isinstance(kwargs[arg_name], expected_type):
                     raise TypeError(
@@ -86,33 +100,12 @@ class ToolRegistry:
                         f"got {type(kwargs[arg_name]).__name__}"
                     )
 
-        # Path traversal guard for file/path arguments (Audit #80 & P0-005)
-        import os
-        from pathlib import Path
-        from core.config import DATA_DIR
-        
-        allowed_dir = os.path.abspath(DATA_DIR)
-        
+        # Enforce global string length limits on all string kwargs
         for arg_name, arg_val in kwargs.items():
-            if isinstance(arg_val, str) and any(k in arg_name.lower() for k in ("path", "file", "dir")):
-                # 1. Reject '..' entirely as a basic hygiene check
-                if ".." in Path(arg_val).parts:
-                    raise PermissionError(
-                        f"Path traversal detected in argument '{arg_name}': parent directory traversal ('..') is strictly prohibited."
-                    )
-                
-                # 2. Strict bounds check against allowed directory
-                target_path = os.path.abspath(os.path.join(allowed_dir, arg_val))
-                try:
-                    if os.path.commonpath([allowed_dir, target_path]) != allowed_dir:
-                        raise PermissionError(
-                            f"Path traversal detected in argument '{arg_name}': Path {target_path} escapes allowed workspace {allowed_dir}."
-                        )
-                except ValueError:
-                    # Different drives on Windows
-                    raise PermissionError(
-                        f"Path traversal detected in argument '{arg_name}': Path {target_path} is on a different drive than workspace {allowed_dir}."
-                    )
+            if isinstance(arg_val, str) and len(arg_val) > TOOL_ARG_MAX_STRING_LENGTH:
+                raise TypeError(
+                    f"Argument '{arg_name}' for tool '{name}' exceeds maximum string length of {TOOL_ARG_MAX_STRING_LENGTH}"
+                )
 
         logger.info(f"Tool call: {name}({kwargs})")
 
@@ -144,6 +137,42 @@ class ToolRegistry:
         return spec.func(**kwargs)
 
 
+from typing import Any
+class FileToolInput(BaseModel):
+    """Base Pydantic model for tools that accept file paths."""
+    
+    @field_validator("*", mode="after")
+    @classmethod
+    def validate_paths(cls, value: Any, info: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+            
+        field_name = info.field_name
+        if any(k in field_name.lower() for k in ("path", "file", "dir")):
+            import os
+            from pathlib import Path
+            from core.config import DATA_DIR
+            
+            # 1. Reject '..' entirely as a basic hygiene check
+            if ".." in Path(value).parts:
+                raise ValueError(
+                    f"Path traversal detected in argument '{field_name}': parent directory traversal ('..') is strictly prohibited."
+                )
+            
+            # 2. Strict bounds check against allowed directory
+            allowed_dir = os.path.abspath(DATA_DIR)
+            target_path = os.path.abspath(os.path.join(allowed_dir, value))
+            try:
+                if os.path.commonpath([allowed_dir, target_path]) != allowed_dir:
+                    raise ValueError(
+                        f"Path traversal detected in argument '{field_name}': Path {target_path} escapes allowed workspace {allowed_dir}."
+                    )
+            except ValueError:
+                raise ValueError(
+                    f"Path traversal detected in argument '{field_name}': Path {target_path} is on a different drive than workspace {allowed_dir}."
+                )
+                
+        return value
 # Global tool registry
 tool_registry = ToolRegistry()
 

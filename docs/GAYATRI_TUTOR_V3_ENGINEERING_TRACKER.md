@@ -2284,7 +2284,7 @@ Do not use the phrase "production-ready" until:
 | AGENT-001 | VERIFIED | Heuristic intent routing |
 | AGENT-002 | VERIFIED | Hardcoded agent budget |
 | AGENT-003 | VERIFIED | Tool timeout doesn't guarantee termination |
-| AGENT-004 | NOT_STARTED | Weak tool schemas |
+| AGENT-004 | VERIFIED | Weak tool schemas |
 | DESKTOP-001 | NOT_STARTED | Navigation/bridge hardening |
 | DESKTOP-002 | NOT_STARTED | Web content security policy |
 | DESKTOP-003 | NOT_STARTED | Temporary provider key mutation |
