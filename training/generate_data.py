@@ -499,17 +499,44 @@ def main():
     def strip_family(d):
         return {"messages": d["messages"]}
 
+    train_data_stripped = [strip_family(item) for item in train_data]
+    val_data_stripped = [strip_family(item) for item in val_data]
+
+    print("Validating datasets...")
+    from training.validators.dataset_validator import DatasetValidator
+    validator = DatasetValidator()
+    
+    train_errors = validator.validate_dataset(train_data_stripped)
+    if train_errors:
+        print(f"ERROR: Found {len(train_errors)} validation errors in training data:")
+        for e in train_errors[:10]:
+            print(f"  - {e}")
+        if len(train_errors) > 10:
+            print("  ... and more")
+        exit(1)
+        
+    val_errors = validator.validate_dataset(val_data_stripped)
+    if val_errors:
+        print(f"ERROR: Found {len(val_errors)} validation errors in validation data:")
+        for e in val_errors[:10]:
+            print(f"  - {e}")
+        if len(val_errors) > 10:
+            print("  ... and more")
+        exit(1)
+
+    print("Validation passed!")
+
     train_path = os.path.join(data_dir, "train.jsonl")
     val_path = os.path.join(data_dir, "val.jsonl")
     manifest_path = os.path.join(data_dir, "manifest.json")
 
     with open(train_path, "w", encoding="utf-8") as f:
-        for item in train_data:
-            f.write(json.dumps(strip_family(item), ensure_ascii=False) + "\n")
+        for item in train_data_stripped:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     with open(val_path, "w", encoding="utf-8") as f:
-        for item in val_data:
-            f.write(json.dumps(strip_family(item), ensure_ascii=False) + "\n")
+        for item in val_data_stripped:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     stats = {
         "total_examples": total,
