@@ -26,7 +26,28 @@ class MainWindow(QMainWindow):
         # WebChannel + Bridge
         self._channel = QWebChannel()
         self._bridge = Bridge()
-        self._channel.registerObject("bridge", self._bridge)
+        
+        # Sub-bridges
+        from app.bridge.chat import ChatBridge
+        from app.bridge.settings import SettingsBridge
+        from app.bridge.provider import ProviderBridge
+        from app.bridge.model import ModelBridge
+        from app.bridge.window import WindowBridge
+        
+        self._chat_bridge = ChatBridge(self._bridge)
+        self._settings_bridge = SettingsBridge(self._bridge)
+        self._provider_bridge = ProviderBridge(self._bridge)
+        self._model_bridge = ModelBridge(self._bridge)
+        self._window_bridge = WindowBridge(self._bridge)
+        
+        # Register them
+        self._channel.registerObject("bridge", self._bridge) # Facade for backwards compat
+        self._channel.registerObject("chat_bridge", self._chat_bridge)
+        self._channel.registerObject("settings_bridge", self._settings_bridge)
+        self._channel.registerObject("provider_bridge", self._provider_bridge)
+        self._channel.registerObject("model_bridge", self._model_bridge)
+        self._channel.registerObject("window_bridge", self._window_bridge)
+
         self._web.page().setWebChannel(self._channel)
         self._bridge.set_view(self._web)
         self._bridge.set_window(self)

@@ -2162,7 +2162,7 @@ Refactor only after P0/P1 behavior is stable.
 
 ```text
 [x] P0-001 restore audit tracker link
-[ ] P0-002 harden QWebChannel boundary
+[x] P0-002 harden QWebChannel boundary
 [ ] P0-003 fix training validation leakage
 [ ] P0-004 replace mastery heuristics
 [ ] P0-005 formalize privacy claims + privacy flow
@@ -2271,7 +2271,7 @@ Do not use the phrase "production-ready" until:
 | ID | Status | Area |
 |---|---|---|
 | P0-001 | VERIFIED | Broken audit-document reference |
-| P0-002 | NOT_STARTED | QWebChannel privileged bridge boundary |
+| P0-002 | VERIFIED | QWebChannel privileged bridge boundary |
 | P0-003 | NOT_STARTED | Training validation leakage |
 | P0-004 | NOT_STARTED | Mastery assessment heuristic correctness |
 | P0-005 | NOT_STARTED | Privacy claim/data-flow mismatch |
@@ -2835,3 +2835,34 @@ Test-Path docs/GAYATRI_TUTOR_V3_ENGINEERING_TRACKER.md
 ### Remaining risk
 - None
 
+
+## 2026-09-12 — Antigravity
+
+### Issue
+- ID: P0-002
+
+### Root cause
+- QWebChannel exposed all backend operations indiscriminately on a single Bridge instance to frontend JS.
+
+### Fix
+- Replaced monolithic bridge registration with explicit sub-bridges (ChatBridge, SettingsBridge, ProviderBridge, ModelBridge, WindowBridge).
+- Bridge acts as a facade connecting signals and slots to maintain backward compatibility for existing JS, while properly dividing capabilities into safe isolated domains.
+- Validated unknown settings rejection and bridge isolation.
+
+### Tests added/updated
+- 	ests/test_bridge_capability.py
+
+### Validation
+`	ext
+pytest tests/test_bridge_capability.py
+ruff check .
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- JS currently still uses the unified ridge for older API calls, but new UI features should connect strictly to the specific sub-bridges to enforce least privilege.
