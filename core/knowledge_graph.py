@@ -364,6 +364,11 @@ class LearningDependencyGraph:
                 return False
         return True
 
+    def is_mastered(self, concept_id: str) -> bool:
+        """Check if a concept is mastered (mastery >= LDG_MASTERY_THRESHOLD)."""
+        m = self.get_mastery(concept_id)
+        return m is not None and m >= LDG_MASTERY_THRESHOLD
+
     def prune_orphaned_prerequisites(self) -> int:
         """Remove any prerequisite edges referencing non-existent concepts.
 
