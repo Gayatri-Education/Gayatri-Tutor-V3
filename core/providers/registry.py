@@ -99,10 +99,16 @@ class ProviderRegistry:
         """Get all models supporting a specific capability."""
         return [m for m in self.get_all_models() if capability in m.capabilities]
 
-    def get_fallback_chain(self, preferred_tier: SpeedTier) -> list[tuple[LLMProvider, ModelInfo]]:
+    def get_fallback_chain(
+        self,
+        preferred_tier: SpeedTier,
+        required_capabilities: list[Capability] | None = None,
+        min_context_length: int = 0,
+    ) -> list[tuple[LLMProvider, ModelInfo]]:
         """Get a fallback chain of (provider, model) pairs for a tier.
 
         Order: preferred_tier → medium → slow.
+        Filters by required capabilities and minimum context length (Audit #PROVIDER-003).
         Returns available providers only.
         Respects privacy_mode: in LOCAL_ONLY mode, only local providers are included.
         """
@@ -134,7 +140,12 @@ class ProviderRegistry:
                     continue
                 try:
                     models = provider.list_models()
-                    matching = [m for m in models if m.speed_tier == tier]
+                    matching = [
+                        m for m in models 
+                        if m.speed_tier == tier
+                        and (not required_capabilities or all(c in m.capabilities for c in required_capabilities))
+                        and (m.context_length >= min_context_length)
+                    ]
                     if matching:
                         chain.append((provider, matching[0]))
                         seen.add(provider.key)

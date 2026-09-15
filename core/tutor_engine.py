@@ -51,6 +51,8 @@ class TutorContext:
     hint_used: bool = False
     time_to_answer_s: float = 0.0
     review_queue: list[str] = field(default_factory=list)
+    recovery_mode: bool = False
+    recovery_reason: str = ""
 
     def to_prompt_context(self) -> str:
         """Build a context string for the model system prompt."""
@@ -63,6 +65,10 @@ class TutorContext:
             f"Student mastery: {int(self.mastery * 100)}% ({mastery_level(self.mastery)})",
             f"Attempts: {self.attempts}, Correct: {self.correct_count}",
         ]
+
+        if self.recovery_mode:
+            lines.append(f"[RECOVERY MODE ACTIVE]: {self.recovery_reason}")
+            lines.append("Inform the student why this foundational prerequisite is being reviewed to prepare them for advanced topics.")
 
         if self.waiting_for_answer:
             lines.append("You just asked a question. Wait for the student's answer before continuing.")
@@ -246,6 +252,8 @@ class TutorEngine:
                     ctx.correct_count = 0
                     ctx.hint_used = False
                     ctx.time_to_answer_s = 0.0
+                    ctx.recovery_mode = getattr(next_concept, "recovery_mode", False)
+                    ctx.recovery_reason = getattr(next_concept, "recovery_reason", "")
                     self.save_context(session_id)
                     logger.info(f"Advanced to concept: {next_concept.name}")
                     return next_concept

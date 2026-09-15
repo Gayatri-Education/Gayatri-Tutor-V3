@@ -46,6 +46,8 @@ class Concept:
     minimum_mastery: float = 0.85
     evidence_count: int = 3
     assessment_types: list[str] = field(default_factory=list)
+    recovery_mode: bool = False
+    recovery_reason: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -61,6 +63,8 @@ class Concept:
             "minimum_mastery": self.minimum_mastery,
             "evidence_count": self.evidence_count,
             "assessment_types": self.assessment_types,
+            "recovery_mode": self.recovery_mode,
+            "recovery_reason": self.recovery_reason,
         }
 
 
@@ -400,7 +404,7 @@ class LearningDependencyGraph:
         if not unlocked:
             logger.warning(
                 f"No concepts directly unlocked for subject='{subject}'. "
-                "Selecting candidate closest to unlocking."
+                "Selecting candidate closest to unlocking (RECOVERY_MODE)."
             )
             # Fallback: score candidates by how close their prerequisites are to mastery
             def _prereq_mastery_score(cand: Concept) -> tuple[float, float]:
@@ -413,7 +417,18 @@ class LearningDependencyGraph:
                 return (avg_m, -cand.difficulty)
 
             candidates.sort(key=_prereq_mastery_score, reverse=True)
-            return candidates[0]
+            chosen = candidates[0]
+            unmet = [p for p in self.get_prerequisites(chosen.id) if not self.is_mastered(p)]
+            unmet_names = [self.get_concept(p).name if self.get_concept(p) else p for p in unmet]
+            chosen.recovery_mode = True
+            if unmet_names:
+                chosen.recovery_reason = (
+                    f"Prerequisites not yet mastered: {', '.join(unmet_names)}. "
+                    "Focusing on foundational concepts to build understanding."
+                )
+            else:
+                chosen.recovery_reason = "No directly unlocked concepts; initiating recovery review."
+            return chosen
 
         # Sort: lowest mastery first, then lowest difficulty, then oldest practice
         unlocked.sort(key=lambda c: (

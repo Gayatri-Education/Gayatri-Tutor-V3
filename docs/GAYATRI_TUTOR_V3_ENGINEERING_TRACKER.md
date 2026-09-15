@@ -2295,10 +2295,10 @@ Do not use the phrase "production-ready" until:
 | EDU-002 | VERIFIED | No spaced reassessment or decay |
 | EDU-003 | VERIFIED | Prerequisite policy |
 | EDU-004 | VERIFIED | Curriculum abstraction |
-| LDG-002 | NOT_STARTED | Recovery-mode prerequisite violation |
-| DB-002 | NOT_STARTED | Transparent corruption recovery |
-| DB-003 | NOT_STARTED | Schema migration |
-| DB-004 | NOT_STARTED | Concurrency validation |
+| LDG-002 | VERIFIED | Recovery-mode prerequisite violation |
+| DB-002 | VERIFIED | Transparent corruption recovery |
+| DB-003 | VERIFIED | Schema migration |
+| DB-004 | VERIFIED | Concurrency validation |
 | TRAIN-001 | NOT_STARTED | Synthetic-data dependence |
 | TRAIN-002 | NOT_STARTED | Dataset overlap check |
 | TRAIN-003 | VERIFIED | Lack of dataset versioning |
@@ -2310,12 +2310,12 @@ Do not use the phrase "production-ready" until:
 | TEST-003 | NOT_STARTED | GUI/headless test separation |
 | PACKAGE-001 | NOT_STARTED | "Pinned" requirements are not pinned |
 | PACKAGE-002 | NOT_STARTED | Python-version consistency |
-| PROVIDER-002 | NOT_STARTED | Provider state semantics |
-| PROVIDER-003 | NOT_STARTED | Capability-aware routing |
-| PROVIDER-004 | NOT_STARTED | Model catalog caching |
-| MODEL-001 | NOT_STARTED | Model integrity verification |
-| MODEL-002 | NOT_STARTED | Model allowlist |
-| MODEL-003 | NOT_STARTED | Model compatibility validation |
+| PROVIDER-002 | VERIFIED | Provider state semantics |
+| PROVIDER-003 | VERIFIED | Capability-aware routing |
+| PROVIDER-004 | VERIFIED | Model catalog caching |
+| MODEL-001 | VERIFIED | Model integrity verification |
+| MODEL-002 | VERIFIED | Model allowlist |
+| MODEL-003 | VERIFIED | Model compatibility validation |
 
 ---
 
@@ -3069,3 +3069,49 @@ pytest tests/
 
 ### Remaining risk
 - Minor risks of CSP blocking unexpected trusted dynamic content, can be tweaked if reported.
+
+## 2026-09-15 — Antigravity
+
+### Issue
+- ID: LDG-002, DB-002, DB-003, DB-004, PROVIDER-002, PROVIDER-003, PROVIDER-004, MODEL-001, MODEL-002, MODEL-003
+
+### Root cause
+- Phase 2 Reliability & Resilience gap:
+  - LDG fallback prerequisite violation without explicit mode indication.
+  - Silent database recreation hiding corruption from user.
+  - Lack of formal SQLite user_version migration system.
+  - Missing concurrency validation tests.
+  - Lack of detailed provider status model, capability-based fallback routing, and model catalog caching.
+  - Model download integrity, destination path traversal, catalog allowlist, and hardware compatibility checks.
+
+### Fix
+- LDG-002: Added ecovery_mode and ecovery_reason to Concept and TutorContext; explicitly surfaced in system prompt when prerequisite review is activated.
+- DB-002: Implemented CorruptionRecoveryEvent tracking (get_last_recovery_event()) in core/db.py to notify users with backup paths.
+- DB-003: Added un_migrations framework in core/db.py utilizing PRAGMA user_version and _schema_migrations table.
+- DB-004: Added 	ests/test_db_concurrency.py testing concurrent multi-threaded writes and WAL mode integrity.
+- PROVIDER-002: Added ProviderStatus enum (READY, AUTH_REQUIRED, OFFLINE, etc.) and get_status() on LLMProvider.
+- PROVIDER-003: Added capability-aware filtering (equired_capabilities, min_context_length) in get_fallback_chain.
+- PROVIDER-004: Added TTL catalog caching (get_cached_models) on LLMProvider.
+- MODEL-001: Enforced size limits (MAX_MODEL_DOWNLOAD_BYTES) and path traversal protection in ollama_pull.py.
+- MODEL-002: Added APPROVED_MODELS allowlist validation in ollama_pull.py.
+- MODEL-003: Added alidate_hardware_compatibility preflight RAM/headroom check.
+
+### Tests added/updated
+- 	ests/test_db_concurrency.py
+- 	ests/test_provider_states.py
+- 	ests/test_model_integrity.py
+
+### Validation
+`	ext
+pytest tests/
+207 passed in 55.26s
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- None

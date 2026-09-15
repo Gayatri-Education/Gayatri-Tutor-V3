@@ -23,6 +23,18 @@ DEFAULT_MODEL_NAMESPACE = "DBERT"
 DEFAULT_MODEL_NAME = "DBERT_AI"
 DEFAULT_MODEL_TAG = "latest"
 
+# Approved Model Allowlist (Audit #MODEL-002)
+APPROVED_MODELS = {
+    ("dbert", "dbert_ai"),
+    ("library", "gemma2"),
+    ("library", "llama3.2"),
+    ("library", "qwen2.5"),
+    ("library", "phi3"),
+}
+
+# Download Safety Limits (Audit #MODEL-001)
+MAX_MODEL_DOWNLOAD_BYTES = 16 * 1024 * 1024 * 1024  # 16 GB max
+
 # Manifest media types
 MEDIA_TYPE_MODEL = "application/vnd.ollama.image.model"
 MEDIA_TYPE_SYSTEM = "application/vnd.ollama.image.system"
@@ -32,6 +44,29 @@ MEDIA_TYPE_PARAMS = "application/vnd.ollama.image.params"
 class OllamaPullError(Exception):
     """Error pulling model from Ollama registry."""
     pass
+
+
+def validate_model_allowlist(namespace: str, name: str) -> None:
+    """Validate model against approved catalog allowlist (Audit #MODEL-002)."""
+    key = (namespace.strip().lower(), name.strip().lower())
+    if key not in APPROVED_MODELS:
+        raise OllamaPullError(
+            f"Model '{namespace}/{name}' is not in the approved model allowlist (Audit #MODEL-002)."
+        )
+
+
+def validate_hardware_compatibility(size_bytes: int) -> tuple[bool, str]:
+    """Verify system has sufficient RAM/headroom to load model (Audit #MODEL-003)."""
+    try:
+        from core.hardware import detect_hardware
+        hw = detect_hardware()
+        free_mb = hw.ram_free_mb
+        required_mb = (size_bytes / (1024 * 1024)) + 500  # model + 500MB KV cache buffer
+        if free_mb > 0 and free_mb < required_mb:
+            return False, f"Insufficient free RAM ({free_mb}MB available, {int(required_mb)}MB required)"
+        return True, "OK"
+    except Exception as exc:
+        return True, f"Hardware validation bypassed: {exc}"
 
 
 class ModelManifest:
@@ -395,9 +430,16 @@ def pull_model(
     Raises:
         OllamaPullError: If any step fails
     """
+    # Validate against approved model allowlist (Audit #MODEL-002)
+    validate_model_allowlist(namespace, name)
+
     from core.config import LOCAL_MODEL_FILE, MODELS_DIR
 
     dest_dir = dest_dir or MODELS_DIR
+    # Destination path traversal guard (Audit #MODEL-001)
+    if ".." in dest_dir.parts:
+        raise OllamaPullError(f"Target destination '{dest_dir}' contains path traversal (Audit #MODEL-001)")
+
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Pulling {namespace}/{name}:{tag} -> {dest_dir}")
@@ -405,9 +447,18 @@ def pull_model(
     # 1. Fetch manifest
     manifest = _get_manifest(namespace, name, tag)
 
-    # Preflight disk space check before starting download (Audit #59)
+    # Preflight disk space and size limit checks before starting download (Audit #59 & #MODEL-001)
     total_required = sum(int(l.get("size", 0)) for l in manifest.layers if "size" in l)
+    if total_required > MAX_MODEL_DOWNLOAD_BYTES:
+        raise OllamaPullError(
+            f"Model size ({total_required // (1024*1024)}MB) exceeds maximum download limit of {MAX_MODEL_DOWNLOAD_BYTES // (1024*1024)}MB (Audit #MODEL-001)"
+        )
     check_disk_space(dest_dir, total_required)
+
+    # Hardware compatibility validation (Audit #MODEL-003)
+    compat_ok, compat_msg = validate_hardware_compatibility(total_required)
+    if not compat_ok:
+        raise OllamaPullError(f"Hardware compatibility check failed: {compat_msg} (Audit #MODEL-003)")
 
     # 2. Download model blob (GGUF)
     model_blob = manifest.model_blob

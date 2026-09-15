@@ -22,6 +22,17 @@ class SpeedTier(str, Enum):
     SLOW = "slow"         # Large reasoning models, local
 
 
+class ProviderStatus(str, Enum):
+    """Operational status classification for providers (Audit #PROVIDER-002)."""
+    READY = "ready"
+    AUTH_REQUIRED = "auth_required"
+    OFFLINE = "offline"
+    RATE_LIMITED = "rate_limited"
+    UNSUPPORTED = "unsupported"
+    MODEL_NOT_FOUND = "model_not_found"
+    UNKNOWN = "unknown"
+
+
 class Capability(str, Enum):
     """Model capability flags."""
     CHAT = "chat"
@@ -203,6 +214,32 @@ class LLMProvider(ABC):
             from core.providers.local import LocalProvider
             return LocalProvider.is_available()
         return self.is_authenticated and self.is_reachable
+
+    def get_status(self) -> ProviderStatus:
+        """Return the detailed provider operational status (Audit #PROVIDER-002)."""
+        if self.is_local:
+            from core.providers.local import LocalProvider
+            return ProviderStatus.READY if LocalProvider.is_available() else ProviderStatus.OFFLINE
+        if not self.is_authenticated:
+            return ProviderStatus.AUTH_REQUIRED
+        if not self.is_reachable:
+            return ProviderStatus.OFFLINE
+        return ProviderStatus.READY
+
+    def get_cached_models(self, ttl_seconds: float = 600.0) -> list[ModelInfo]:
+        """Return cached models if within TTL, else fetch fresh (Audit #PROVIDER-004)."""
+        import time
+        cached_models = getattr(self, "_cached_models", None)
+        cached_at = getattr(self, "_cached_models_timestamp", 0.0)
+        now = time.time()
+
+        if cached_models is not None and (now - cached_at) < ttl_seconds:
+            return cached_models
+
+        fresh_models = self.list_models()
+        self._cached_models = fresh_models
+        self._cached_models_timestamp = now
+        return fresh_models
 
     def check_privacy_policy(self) -> None:
         """Enforce privacy policy and log transmission audit for cloud providers."""
