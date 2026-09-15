@@ -59,9 +59,6 @@ class ProviderRegistry:
     def _check_provider_available(self, provider: LLMProvider) -> bool:
         """Quick check if a provider is ready and reachable."""
         try:
-            if provider.key == "local":
-                from core.providers.local import LocalProvider
-                return LocalProvider.is_available()
             if hasattr(provider, "is_ready"):
                 return provider.is_ready()
             return provider.is_authenticated and provider.is_reachable

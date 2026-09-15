@@ -12,3 +12,4 @@ models/
 settings.json
 GayatriAI/
 ignored_assets/
+dist/

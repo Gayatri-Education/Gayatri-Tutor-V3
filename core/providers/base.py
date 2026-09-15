@@ -210,19 +210,13 @@ class LLMProvider(ABC):
 
     def is_ready(self) -> bool:
         """Whether the provider is authenticated, reachable, and has available models."""
-        if self.is_local:
-            from core.providers.local import LocalProvider
-            return LocalProvider.is_available()
         return self.is_authenticated and self.is_reachable
 
     def get_status(self) -> ProviderStatus:
         """Return the detailed provider operational status (Audit #PROVIDER-002)."""
-        if self.is_local:
-            from core.providers.local import LocalProvider
-            return ProviderStatus.READY if LocalProvider.is_available() else ProviderStatus.OFFLINE
         if not self.is_authenticated:
             return ProviderStatus.AUTH_REQUIRED
-        if not self.is_reachable:
+        if not self.is_reachable or not self.is_ready():
             return ProviderStatus.OFFLINE
         return ProviderStatus.READY
 
