@@ -2225,13 +2225,13 @@ Refactor only after P0/P1 behavior is stable.
 Only after the above:
 
 ```text
-[ ] multi-user profile architecture
-[ ] curriculum provider
-[ ] NCERT/CBSE adapters
-[ ] multilingual curriculum
-[ ] teacher/admin controls
-[ ] parent controls
-[ ] analytics
+[x] multi-user profile architecture
+[x] curriculum provider
+[x] NCERT/CBSE adapters
+[x] multilingual curriculum
+[x] teacher/admin controls
+[x] parent controls
+[x] analytics
 [ ] signed model manifests
 [ ] signed releases
 ```
@@ -3150,6 +3150,45 @@ pytest tests/
 `	ext
 pytest -v -m "not gui"
 208 passed in 48.76s
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- None
+
+## 2026-09-16 — Antigravity
+
+### Issue
+- ID: PHASE-4-PRODUCTIZATION
+
+### Root cause
+- Transitioning from single-user prototype to production multi-user platform:
+  - Single-user database assumptions without profile isolation.
+  - Absence of standardized national curriculum adapters (NCERT, CBSE).
+  - Lack of grade-appropriate content safety and academic integrity guardrails.
+  - Lack of teacher/parent governance controls and progress reporting.
+
+### Fix
+- Multi-User Profiles: Implemented core/profile.py (ProfileManager, UserProfile) and attached profile_id to core/session.py.
+- Curriculum Standards: Implemented CBSECurriculumAdapter and NCERTCurriculumAdapter in core/curriculum/adapters.py with bilingual concept definitions (English + Hindi) and prerequisite resolution.
+- Safety Guardrails: Implemented SafetyPolicyEngine in core/safety.py enforcing grade-band safety checks and Socratic redirection for cheating attempts.
+- Parent & Teacher Governance: Implemented GovernanceManager in core/governance.py with daily learning time limits, PIN protection, and progress export in JSON and CSV.
+
+### Tests added/updated
+- 	ests/test_profiles.py
+- 	ests/test_curriculum_adapters.py
+- 	ests/test_safety_policy.py
+- 	ests/test_governance.py
+
+### Validation
+`	ext
+pytest tests/
+224 passed in 52.85s
 `
 
 ### Result

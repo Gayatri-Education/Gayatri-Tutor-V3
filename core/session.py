@@ -69,6 +69,7 @@ class SessionStore:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id          TEXT PRIMARY KEY,
+                profile_id  TEXT DEFAULT 'default',
                 title       TEXT DEFAULT '',
                 created_at  TEXT NOT NULL,
                 updated_at  TEXT NOT NULL,
@@ -105,6 +106,11 @@ class SessionStore:
                 ON messages(timestamp);
         """)
         conn.commit()
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN profile_id TEXT DEFAULT 'default';")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Already present
         logger.info(f"Session DB ready: {self.db_path}")
 
     def save_session(self, session_id: str, conversation: Any, tutor_context: Any = None) -> None:
@@ -386,21 +392,29 @@ class SessionStore:
                 for row in cursor.fetchall()
             ]
 
-    def list_sessions(self) -> list[dict]:
-        """List all sessions ordered by most recent first.
+    def list_sessions(self, profile_id: str | None = None) -> list[dict]:
+        """List all sessions ordered by most recent first, optionally filtered by profile.
 
         Returns:
-            List of {id, title, created_at, updated_at, message_count, preview}
+            List of {id, profile_id, title, created_at, updated_at, message_count, preview}
         """
         with self._lock:
             conn = self.conn
-            cursor = conn.execute(
-                "SELECT id, title, created_at, updated_at, message_count "
-                "FROM sessions ORDER BY updated_at DESC"
-            )
+            if profile_id is not None:
+                cursor = conn.execute(
+                    "SELECT id, profile_id, title, created_at, updated_at, message_count "
+                    "FROM sessions WHERE profile_id = ? ORDER BY updated_at DESC",
+                    (profile_id,),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT id, profile_id, title, created_at, updated_at, message_count "
+                    "FROM sessions ORDER BY updated_at DESC"
+                )
             return [
                 {
                     "id": row["id"],
+                    "profile_id": row["profile_id"] if "profile_id" in row.keys() else "default",
                     "title": row["title"] or row["id"][:20],
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
