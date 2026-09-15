@@ -70,12 +70,13 @@ def validate_hardware_compatibility(size_bytes: int) -> tuple[bool, str]:
 
 
 class ModelManifest:
-    """Parsed Ollama manifest."""
+    """Parsed Ollama manifest with cryptographic signature support."""
 
-    def __init__(self, digest: str, layers: list[dict], config: dict):
+    def __init__(self, digest: str, layers: list[dict], config: dict, raw_data: dict | None = None):
         self.digest = digest
         self.layers = layers
         self.config = config
+        self.raw_data = raw_data or {}
 
     @property
     def model_blob(self) -> dict | None:
@@ -108,7 +109,13 @@ class ModelManifest:
             digest=data.get("config", {}).get("digest", ""),
             layers=data.get("layers", []),
             config=data.get("config", {}),
+            raw_data=data,
         )
+
+    def verify_signature(self, public_key_b64: str) -> bool:
+        """Verify the cryptographic signature of the manifest using an Ed25519 public key."""
+        from core.security.signatures import ManifestVerifier
+        return ManifestVerifier.verify_manifest(self.raw_data, public_key_b64)
 
 
 def _get_manifest(namespace: str, name: str, tag: str) -> ModelManifest:
@@ -414,6 +421,8 @@ def pull_model(
     tag: str = DEFAULT_MODEL_TAG,
     dest_dir: Path | None = None,
     progress_callback: Callable[[str, int, int], None] | None = None,
+    require_signed_manifest: bool = False,
+    trusted_public_keys: list[str] | None = None,
 ) -> dict:
     """Pull a model from the Ollama registry.
 
@@ -446,6 +455,23 @@ def pull_model(
 
     # 1. Fetch manifest
     manifest = _get_manifest(namespace, name, tag)
+
+    # 1b. Cryptographic signature check for signed model manifests (Audit #MODEL-001)
+    if require_signed_manifest:
+        from core.security.signatures import ManifestVerifier
+        sig_meta = manifest.raw_data.get("signature")
+        if not sig_meta:
+            raise OllamaPullError("Model manifest is unsigned; rejected under strict integrity policy")
+        valid, key_used = ManifestVerifier.verify_against_trust_anchors(
+            manifest.raw_data.get("raw_bytes") or bytes(str(manifest.digest), "utf-8"),
+            sig_meta.get("value", ""),
+            trusted_keys=trusted_public_keys,
+        )
+        if not valid:
+            # Fallback check verifying canonical manifest dictionary
+            if not any(manifest.verify_signature(k) for k in (trusted_public_keys or [])):
+                raise OllamaPullError("Model manifest cryptographic signature verification failed (Audit #MODEL-001)")
+        logger.info("Model manifest signature verified successfully against trusted key")
 
     # Preflight disk space and size limit checks before starting download (Audit #59 & #MODEL-001)
     total_required = sum(int(l.get("size", 0)) for l in manifest.layers if "size" in l)

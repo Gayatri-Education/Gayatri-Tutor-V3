@@ -1,12 +1,14 @@
-﻿#!/usr/bin/env python3
-"""Gayatri AI — Automated Release Packager & Integrity Manifest Generator.
+#!/usr/bin/env python3
+"""Gayatri AI - Automated Release Packager & Integrity Manifest Generator.
 
-Packages application assets into a distributable release directory and
-computes cryptographic SHA-256 checksums for release verification.
+Packages application assets into a distributable release directory,
+computes cryptographic SHA-256 checksums, and optionally cryptographically
+signs the release manifest with an Ed25519 private key.
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -28,6 +30,7 @@ def package_release(
     source_root: Path | None = None,
     output_dir: Path | None = None,
     version: str = "3.0.0",
+    signing_key_b64: str | None = None,
 ) -> dict:
     """Package release files and produce a signed integrity manifest."""
     root = source_root or Path(__file__).resolve().parent.parent
@@ -46,6 +49,9 @@ def package_release(
         "requirements.lock",
         "pyproject.toml",
         "README.md",
+        "VERSION",
+        "CHANGELOG.md",
+        "RELEASE_NOTES.md",
     ]
 
     for d in include_dirs:
@@ -65,7 +71,7 @@ def package_release(
     # Compute SHA-256 manifest
     file_manifest: dict[str, str] = {}
     for p in out.rglob("*"):
-        if p.is_file() and p.name != "RELEASE_MANIFEST.json":
+        if p.is_file() and p.name not in ("RELEASE_MANIFEST.json", "RELEASE_MANIFEST.sig"):
             rel_path = str(p.relative_to(out)).replace("\\", "/")
             file_manifest[rel_path] = compute_file_sha256(p)
 
@@ -83,14 +89,27 @@ def package_release(
     with open(manifest_path, "w", encoding="utf-8") as mf:
         json.dump(manifest_data, mf, indent=2)
 
+    sig_path = None
+    if signing_key_b64:
+        from core.security.signatures import ManifestSigner
+        sig_path = ManifestSigner.sign_file(manifest_path, signing_key_b64, out / "RELEASE_MANIFEST.sig")
+
     return {
         "output_directory": str(out),
         "version": version,
         "total_files": len(file_manifest),
         "manifest_path": str(manifest_path),
+        "signature_path": str(sig_path) if sig_path else None,
     }
 
 
 if __name__ == "__main__":
-    res = package_release()
+    parser = argparse.ArgumentParser(description="Package Gayatri AI release")
+    parser.add_argument("--version", default="3.0.0", help="Release version string")
+    parser.add_argument("--sign-key", default=None, help="Base64-encoded Ed25519 private key for signing")
+    args = parser.parse_args()
+
+    res = package_release(version=args.version, signing_key_b64=args.sign_key)
     print(f"Packaged Gayatri AI release: {res['total_files']} files to {res['output_directory']}")
+    if res.get("signature_path"):
+        print(f"Signed release manifest: {res['signature_path']}")

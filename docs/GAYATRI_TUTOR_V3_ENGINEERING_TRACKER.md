@@ -2220,7 +2220,7 @@ Refactor only after P0/P1 behavior is stable.
 
 ---
 
-## Phase 4 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Productization
+## Phase 4 A'A,AAAA,A,AAAA?sAA_AA Productization
 
 Only after the above:
 
@@ -2232,10 +2232,22 @@ Only after the above:
 [x] teacher/admin controls
 [x] parent controls
 [x] analytics
-[ ] signed model manifests
-[ ] signed releases
+[x] signed model manifests
+[x] signed releases
 ```
 
+---
+
+## Phase 5 A'A,AAAA,A,AAAA?sAA_AA Release Hardening & Cryptographic Integrity
+
+```text
+[x] Ed25519 cryptographic signing engine (core/security/signatures.py)
+[x] signed model manifests verification (core/model_fetch/ollama_pull.py)
+[x] signed releases packaging & verification CLI (scripts/verify_release.py)
+[x] root VERSION file (3.0.0)
+[x] root CHANGELOG.md
+[x] root RELEASE_NOTES.md
+```
 ---
 
 # 31. Acceptance Gate: "Production-Ready"
@@ -3229,6 +3241,42 @@ pytest tests/
 ```text
 pytest tests/
 228 passed in 27.81s
+```
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- None
+
+## 2026-09-16 - Antigravity
+
+### Issue
+- ID: PHASE-5-RELEASE-HARDENING-AND-SIGNATURES
+
+### Root cause
+- Need for end-to-end cryptographic supply-chain verification:
+  - Model weights and manifests required tamper-evident cryptographic signing.
+  - Release distributions required signed manifests with public-key verification.
+  - Formal versioning and release notes artifacts were needed per Section 28 requirements.
+
+### Fix
+- Cryptographic Engine: Implemented Ed25519 signing and verification in `core/security/signatures.py`.
+- Model Manifest Signing: Integrated signature checking into `core/model_fetch/ollama_pull.py` under strict integrity mode.
+- Release Tools: Updated `scripts/package_release.py` to sign distributions and created `scripts/verify_release.py` for full bundle and hash verification.
+- Release Governance: Created root `VERSION`, `CHANGELOG.md`, and `RELEASE_NOTES.md`.
+
+### Tests added/updated
+- tests/test_crypto_signatures.py
+- tests/test_signed_release.py
+
+### Validation
+```text
+pytest tests/
+237 passed in 26.74s
 ```
 
 ### Result
