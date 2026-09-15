@@ -23,6 +23,11 @@ class MasteryLevel(str, Enum):
     PROFICIENT = "Proficient"
     MASTERED = "Mastered"
 
+class RecoveryMode(str, Enum):
+    NORMAL = "Normal"
+    MISSING_PREREQUISITES = "MissingPrerequisites"
+    EMPTY_CURRICULUM = "EmptyCurriculum"
+
 def mastery_level(score: float) -> str:
     if score >= 0.9:
         return MasteryLevel.MASTERED.value
@@ -53,6 +58,7 @@ class TutorContext:
     review_queue: list[str] = field(default_factory=list)
     recovery_mode: bool = False
     recovery_reason: str = ""
+    metadata: dict = field(default_factory=dict)
 
     def to_prompt_context(self) -> str:
         """Build a context string for the model system prompt."""
@@ -239,6 +245,15 @@ class TutorEngine:
                 
                 if not next_concept:
                     next_concept = self.ldg.get_next_concept(ctx.subject)
+                    
+                    if next_concept is None:
+                        ctx.metadata['recovery_mode'] = RecoveryMode.EMPTY_CURRICULUM.value
+                    elif not self.ldg.is_unlocked(next_concept.id):
+                        ctx.metadata['recovery_mode'] = RecoveryMode.MISSING_PREREQUISITES.value
+                    else:
+                        ctx.metadata['recovery_mode'] = RecoveryMode.NORMAL.value
+                else:
+                    ctx.metadata['recovery_mode'] = RecoveryMode.NORMAL.value
                 
                 if next_concept:
                     # Advance context
@@ -255,12 +270,13 @@ class TutorEngine:
                     ctx.recovery_mode = getattr(next_concept, "recovery_mode", False)
                     ctx.recovery_reason = getattr(next_concept, "recovery_reason", "")
                     self.save_context(session_id)
-                    logger.info(f"Advanced to concept: {next_concept.name}")
+                    logger.info(f"Advanced to concept: {next_concept.name} (Recovery: {ctx.metadata.get('recovery_mode')})")
                     return next_concept
                 else:
                     return None
             else:
                 # Keep current
+                ctx.metadata['recovery_mode'] = RecoveryMode.NORMAL.value
                 return self.ldg.get_concept(current_id) if current_id else None
 
     def record_student_response(self, session_id: str, correct: bool | None,
