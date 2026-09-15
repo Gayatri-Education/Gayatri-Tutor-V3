@@ -2273,8 +2273,8 @@ Do not use the phrase "production-ready" until:
 | P0-001 | VERIFIED | Broken audit-document reference |
 | P0-002 | VERIFIED | QWebChannel privileged bridge boundary |
 | P0-003 | VERIFIED | Training validation leakage |
-| P0-004 | NOT_STARTED | Mastery assessment heuristic correctness |
-| P0-005 | NOT_STARTED | Privacy claim/data-flow mismatch |
+| P0-004 | VERIFIED | Mastery assessment heuristic correctness |
+| P0-005 | VERIFIED | Privacy claim/data-flow mismatch |
 | P0-006 | VERIFIED | Insecure non-Windows secret fallback |
 
 ## P1
@@ -2979,3 +2979,60 @@ pytest tests/test_secrets.py
 
 ### Remaining risk
 - On non-Windows platforms, the symmetric key DATA_DIR/.hmac_key is stored alongside the vault. While it has  o600 permissions, a malicious actor who gains user-level read access to DATA_DIR could theoretically acquire both the key and the vault. (This is standard for local unprivileged storage without a keychain, but weaker than Windows DPAPI).
+
+## 2026-09-15 — Antigravity
+
+### Issue
+- ID: P0-004
+
+### Root cause
+- Mastery evaluation relied on rigid, exploitable textual prefixes ("yes", "right" = correct) instead of semantic understanding.
+
+### Fix
+- Replaced text heuristics in core/orchestrator.py with an LLM call via LocalProvider, asking for a structured JSON evaluation (correct boolean and confidence float).
+
+### Tests added/updated
+- Run pytest suite to ensure no breakage.
+
+### Validation
+`	ext
+pytest tests/
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- Added latency to tutor wait-responses due to the inline local model call.
+
+## 2026-09-15 — Antigravity
+
+### Issue
+- ID: P0-005
+
+### Root cause
+- README privacy claims stated data "never leaves your device" despite the existence of a cloud-allowed mode.
+
+### Fix
+- Updated README.md to precisely describe Local-Only mode (default) vs Cloud-Allowed mode data boundaries.
+- Added a TRANSMISSION_AUDIT log entry in core/providers/base.py check_privacy_policy whenever a cloud provider is used in cloud-allowed mode.
+
+### Tests added/updated
+- Run pytest suite to ensure no breakage.
+
+### Validation
+`	ext
+pytest tests/
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- None

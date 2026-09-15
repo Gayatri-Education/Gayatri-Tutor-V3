@@ -1,4 +1,5 @@
 import pytest
+import json
 from core.tutor_engine import TutorEngine, get_tutor_engine
 from core.knowledge_graph import LearningDependencyGraph
 from core.orchestrator import _evaluate_tutor_response
@@ -18,6 +19,24 @@ def test_evaluate_tutor_response_mastery_update(monkeypatch, tmp_path):
     tutor = TutorEngine(ldg)
     monkeypatch.setattr("core.orchestrator._get_tutor_engine", lambda: tutor)
     monkeypatch.setattr("core.orchestrator._get_ldg", lambda: ldg)
+    
+    # Mock LLM Evaluator based on input
+    def mock_chat(messages, **kwargs):
+        user_msg = messages[-1]["content"].lower()
+        if "well, i was thinking" in user_msg:
+            return '{"correct": null, "confidence": 0.5}'
+        elif "i don't know" in user_msg:
+            return '{"correct": false, "confidence": 0.9}'
+        elif "yes, i think it is" in user_msg:
+            return '{"correct": true, "confidence": 0.9}'
+        elif "ok" in user_msg:
+            return '{"correct": false, "confidence": 0.9}'
+        elif "nope that is definitely not right" in user_msg:
+            return '{"correct": false, "confidence": 0.9}'
+        return '{"correct": null, "confidence": 1.0}'
+        
+    monkeypatch.setattr("core.providers.local.LocalProvider.chat", mock_chat)
+
     # Set context
     ctx = tutor.get_or_create_context("test_session")
     ctx.current_concept_id = "test_concept"

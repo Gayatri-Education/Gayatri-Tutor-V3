@@ -308,6 +308,9 @@ class TestStalenessGuardAndQuestionHandling:
         tutor = TutorEngine(ldg)
         monkeypatch.setattr("core.orchestrator._get_tutor_engine", lambda: tutor)
         monkeypatch.setattr("core.orchestrator._get_ldg", lambda: ldg)
+        
+        # Mock the new LLM evaluator to return null for clarification
+        monkeypatch.setattr("core.providers.local.LocalProvider.chat", lambda msgs, **kwargs: '{"correct": null, "confidence": 1.0}')
 
         session_id = "clarify_sess"
         ctx = tutor.get_or_create_context(session_id)
@@ -329,6 +332,9 @@ class TestTransactionalTurnRollback:
         db_path = tmp_path / "test_rollback.db"
         ldg = LearningDependencyGraph(db_path=db_path)
         ldg.add_concept("concept_tx", "Transaction Concept")
+        
+        # Mock LLM Evaluator
+        monkeypatch.setattr("core.providers.local.LocalProvider.chat", lambda msgs, **kwargs: '{"correct": true, "confidence": 1.0}')
 
         # Initialize concept mastery to 0.5 in SQLite
         conn = ldg._conn()
@@ -370,6 +376,9 @@ class TestTransactionalTurnRollback:
         db_path = tmp_path / "test_commit.db"
         ldg = LearningDependencyGraph(db_path=db_path)
         ldg.add_concept("concept_success", "Success Concept")
+        
+        # Mock LLM Evaluator
+        monkeypatch.setattr("core.providers.local.LocalProvider.chat", lambda msgs, **kwargs: '{"correct": true, "confidence": 1.0}')
 
         # Initialize concept mastery to 0.5 in SQLite
         conn = ldg._conn()

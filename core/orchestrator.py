@@ -172,32 +172,48 @@ def _evaluate_tutor_response(session_id: str, user_message: str, agent_response:
         if not tutor.is_waiting_for_answer(session_id):
             return
 
-        lower_msg = user_message.lower().strip()
-
-        # Check if user is asking a clarification/question rather than giving a wrong answer
-        # e.g. "no, wait, what is a variable?" or "can you explain?"
-        is_clarification = (
-            "?" in lower_msg
-            or any(lower_msg.startswith(w) for w in ("what", "why", "how", "who", "when", "where", "can you", "could you", "explain", "help me understand"))
-            or "wait" in lower_msg
+        system_prompt = (
+            f"You are an educational evaluator. The student is learning '{ctx.current_concept_name}'.\n"
+            f"Concept description: {ctx.concept_description}\n\n"
+            "Evaluate the student's answer. Answer ONLY in JSON format: "
+            '{"correct": true, "confidence": 0.9} (use false if incorrect, and null if it is a clarification question or too ambiguous).'
         )
 
-        if is_clarification and lower_msg not in ("?", "help", "idk", "i don't know"):
-            correct = None  # Student asking a question / seeking clarification, do not penalize
-        elif len(lower_msg) < 3:
-            correct = False
-        elif lower_msg in ("i don't know", "idk", "?", "help", "i'm stuck", "no idea"):
-            correct = False
-        elif lower_msg.startswith(("yes", "yeah", "yep", "correct", "right", "i think", "it is")):
-            correct = True
-        elif lower_msg.startswith(("no", "nope", "wrong", "incorrect", "not")):
-            correct = False
-        else:
-            correct = None  # uncertain, do not increase mastery
+        correct = None
+        confidence = 1.0
+
+        try:
+            from core.providers.local import LocalProvider
+            import json
+            eval_resp = LocalProvider.chat([
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ], max_tokens=20, temperature=0.1)
+            
+            clean_resp = eval_resp.strip()
+            if clean_resp.startswith("```json"):
+                clean_resp = clean_resp[7:]
+            if clean_resp.startswith("```"):
+                clean_resp = clean_resp[3:]
+            if clean_resp.endswith("```"):
+                clean_resp = clean_resp[:-3]
+            clean_resp = clean_resp.strip()
+
+            result = json.loads(clean_resp)
+            correct = result.get("correct")
+            conf = result.get("confidence")
+            if isinstance(conf, (int, float)):
+                confidence = float(conf)
+                
+            logger.info(f"LLM evaluation for '{ctx.current_concept_name}': correct={correct}, confidence={confidence:.2f}")
+        except Exception as llm_exc:
+            logger.warning(f"LLM evaluator failed or returned invalid JSON: {llm_exc}. Defaulting to uncertain.")
+            correct = None
 
         mastery = tutor.record_student_response(
             session_id,
             correct=correct,
+            confidence=confidence,
             student_answer=user_message,
         )
         logger.info(

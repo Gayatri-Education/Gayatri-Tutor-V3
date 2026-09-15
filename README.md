@@ -3,7 +3,7 @@
 > **A Next-Generation, Local-First Agentic AI Platform**  
 > *Developed with pride under the [DBERT Internship Program](https://dbert.online)*
 
-Gayatri Tutor V3 is an advanced, privacy-first desktop application designed to revolutionize personalized learning and AI assistance. By combining a locally-hosted fine-tuned Large Language Model (LLM) with a sophisticated agentic architecture, it provides an intelligent, secure, and highly responsive learning environment.
+Gayatri Tutor V3 is an advanced, local-first desktop application designed to revolutionize personalized learning and AI assistance. By combining a locally-hosted fine-tuned Large Language Model (LLM) with a sophisticated agentic architecture, it provides an intelligent and privacy-controlled learning environment.
 
 This project was built from the ground up to demonstrate how specialized AI agents, orchestrated by a central locally-running brain, can securely tutor students, execute complex tools, and seamlessly bridge local inference with cloud APIs when needed.
 
@@ -12,7 +12,9 @@ This project was built from the ground up to demonstrate how specialized AI agen
 ## 🌟 What This Project Does
 
 - **Intelligent Orchestration:** A central local LLM routes user requests to specialized AI agents (e.g., Code Reviewer, Math Tutor, General Assistant) based on context and need.
-- **Privacy First by Design:** All primary inference happens entirely on your local machine using quantized GGUF models via `llama-cpp-python`. Sensitive data (PII, credentials) never leaves your device.
+- **Privacy Controlled by Design:** The app supports precise data boundary control:
+  - **Local-Only Mode (Default):** All primary inference happens entirely on your local machine using quantized GGUF models. Conversation content stays on-device except for explicitly invoked local dependencies.
+  - **Cloud-Allowed Mode:** User-approved provider calls may transmit submitted content according to the provider's policy.
 - **Interactive Tutoring Engine:** Tracks student mastery over concepts using a Learning Dependency Graph and adapts responses dynamically to foster actual learning rather than just providing answers.
 - **Beautiful & Native Desktop UI:** Built using PySide6 and a modern WebEngine front-end, bridging smooth web technologies with robust Python backend logic.
 

@@ -205,7 +205,7 @@ class LLMProvider(ABC):
         return self.is_authenticated and self.is_reachable
 
     def check_privacy_policy(self) -> None:
-        """Enforce privacy policy: prevent data leaving the device in LOCAL_ONLY mode."""
+        """Enforce privacy policy and log transmission audit for cloud providers."""
         if not self.is_local:
             try:
                 from core.config import ExecutionMode
@@ -216,6 +216,10 @@ class LLMProvider(ABC):
                         f"Data cannot leave the device: provider '{self.name}' ({self.key}) "
                         "is blocked because privacy mode is set to 'local_only'."
                     )
+                # P0-005: Per-request transmission audit when cloud-allowed
+                import logging
+                audit_logger = logging.getLogger("gayatri.privacy.audit")
+                audit_logger.info(f"TRANSMISSION_AUDIT: User-approved cloud request sent to provider '{self.name}' ({self.key}) in cloud_allowed mode.")
             except ImportError:
                 pass
 
