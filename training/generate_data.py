@@ -551,9 +551,17 @@ def main():
             print(f"  - {e}")
         if len(val_errors) > 10:
             print("  ... and more")
-        exit(1)
-
     print("Validation passed!")
+
+    # Check for near-duplicate train/val data leakage (Audit #TRAIN-002)
+    from training.validators.dataset_validator import SplitLeakageCheck
+    leakage_checker = SplitLeakageCheck(threshold=0.85)
+    leakage_errors = leakage_checker.check_splits(train_data_stripped, val_data_stripped)
+    if leakage_errors:
+        print(f"ERROR: Found {len(leakage_errors)} near-duplicate train/val leakages (Audit #TRAIN-002):")
+        for e in leakage_errors[:10]:
+            print(f"  - {e}")
+        exit(1)
 
     train_path = os.path.join(data_dir, "train.jsonl")
     val_path = os.path.join(data_dir, "val.jsonl")

@@ -91,3 +91,31 @@ def test_generator_commit_present(tmp_path):
         
     assert 'generator_commit' in manifest
     assert len(manifest['generator_commit']) > 0
+
+
+def test_split_leakage_detection():
+    """TRAIN-002: Verify that near-duplicate samples across train/val splits are caught."""
+    from training.validators.dataset_validator import SplitLeakageCheck
+
+    train_samples = [
+        {"messages": [{"role": "user", "content": "What is the capital of France?"}, {"role": "assistant", "content": "The capital of France is Paris."}]},
+        {"messages": [{"role": "user", "content": "How do you calculate the area of a circle?"}, {"role": "assistant", "content": "The area is pi times r squared."}]},
+    ]
+
+    # Exactly or nearly duplicate validation sample
+    leaked_val_samples = [
+        {"messages": [{"role": "user", "content": "What is the capital city of France?"}, {"role": "assistant", "content": "The capital of France is Paris."}]},
+    ]
+
+    # Clean distinct validation sample
+    clean_val_samples = [
+        {"messages": [{"role": "user", "content": "Explain Newton's third law of motion in physics."}, {"role": "assistant", "content": "For every action there is an equal opposite reaction."}]},
+    ]
+
+    checker = SplitLeakageCheck(threshold=0.70)
+    leaks = checker.check_splits(train_samples, leaked_val_samples)
+    assert len(leaks) > 0
+    assert "Leakage detected" in leaks[0]
+
+    clean = checker.check_splits(train_samples, clean_val_samples)
+    assert len(clean) == 0

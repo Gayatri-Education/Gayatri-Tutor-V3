@@ -1,5 +1,6 @@
-# Gayatri AI — Pinned Dependencies
-# Install: pip install -r requirements.txt
+# Gayatri AI — Base Dependencies
+# Development install: pip install -r requirements.txt
+# Reproducible / pinned release install: pip install -r requirements.lock (Audit #PACKAGE-001)
 
 # Core runtime
 PySide6>=6.11.0

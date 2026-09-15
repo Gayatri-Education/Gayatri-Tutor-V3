@@ -94,3 +94,49 @@ class DatasetValidator:
         for idx, item in enumerate(data):
             all_errors.extend(self.validate_item(item, idx))
         return all_errors
+
+
+def extract_shingles(text: str, n: int = 3) -> set[tuple[str, ...]]:
+    """Extract word n-grams for Jaccard similarity comparison (Audit #TRAIN-002)."""
+    words = re.findall(r"\w+", text.lower())
+    if len(words) < n:
+        return {tuple(words)} if words else set()
+    return {tuple(words[i:i+n]) for i in range(len(words) - n + 1)}
+
+
+def jaccard_similarity(s1: set, s2: set) -> float:
+    """Calculate Jaccard similarity coefficient between two token sets."""
+    if not s1 or not s2:
+        return 0.0
+    intersection = len(s1.intersection(s2))
+    union = len(s1.union(s2))
+    return intersection / union if union > 0 else 0.0
+
+
+class SplitLeakageCheck:
+    """Checks for exact and near-duplicate leakage between training and validation splits (Audit #TRAIN-002)."""
+
+    def __init__(self, threshold: float = 0.85):
+        self.threshold = threshold
+
+    def check_splits(
+        self, train_data: List[Dict[str, Any]], val_data: List[Dict[str, Any]]
+    ) -> List[str]:
+        """Verify that no sample in val_data is a duplicate or near-duplicate of train_data."""
+        leakage_errors = []
+        train_shingles = []
+        for i, item in enumerate(train_data):
+            text = " ".join(str(m.get("content", "")) for m in item.get("messages", []))
+            train_shingles.append((i, extract_shingles(text)))
+
+        for j, val_item in enumerate(val_data):
+            val_text = " ".join(str(m.get("content", "")) for m in val_item.get("messages", []))
+            v_shingles = extract_shingles(val_text)
+            for i, t_shingles in train_shingles:
+                sim = jaccard_similarity(t_shingles, v_shingles)
+                if sim >= self.threshold:
+                    leakage_errors.append(
+                        f"Leakage detected: Val item {j} is a near-duplicate of Train item {i} (similarity={sim:.2f} >= {self.threshold})"
+                    )
+                    break
+        return leakage_errors

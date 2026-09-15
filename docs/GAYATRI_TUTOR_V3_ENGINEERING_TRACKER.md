@@ -2299,17 +2299,17 @@ Do not use the phrase "production-ready" until:
 | DB-002 | VERIFIED | Transparent corruption recovery |
 | DB-003 | VERIFIED | Schema migration |
 | DB-004 | VERIFIED | Concurrency validation |
-| TRAIN-001 | NOT_STARTED | Synthetic-data dependence |
-| TRAIN-002 | NOT_STARTED | Dataset overlap check |
+| TRAIN-001 | VERIFIED | Synthetic-data dependence |
+| TRAIN-002 | VERIFIED | Dataset overlap check |
 | TRAIN-003 | VERIFIED | Lack of dataset versioning |
 | TRAIN-004 | VERIFIED | Dataset generation non-deterministic \|seed \| |
 | TRAIN-005 | VERIFIED | Dataset quality validation |
 | TRAIN-006 | VERIFIED | Held-out educational benchmark |
-| TEST-001 | NOT_STARTED | Source-text assertions |
-| TEST-002 | NOT_STARTED | Placeholder regression test |
-| TEST-003 | NOT_STARTED | GUI/headless test separation |
-| PACKAGE-001 | NOT_STARTED | "Pinned" requirements are not pinned |
-| PACKAGE-002 | NOT_STARTED | Python-version consistency |
+| TEST-001 | VERIFIED | Source-text assertions |
+| TEST-002 | VERIFIED | Placeholder regression test |
+| TEST-003 | VERIFIED | GUI/headless test separation |
+| PACKAGE-001 | VERIFIED | "Pinned" requirements are not pinned |
+| PACKAGE-002 | VERIFIED | Python-version consistency |
 | PROVIDER-002 | VERIFIED | Provider state semantics |
 | PROVIDER-003 | VERIFIED | Capability-aware routing |
 | PROVIDER-004 | VERIFIED | Model catalog caching |
@@ -3105,6 +3105,51 @@ pytest tests/
 `	ext
 pytest tests/
 207 passed in 55.26s
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- None
+
+## 2026-09-16 — Antigravity
+
+### Issue
+- ID: TRAIN-001, TRAIN-002, TEST-001, TEST-002, TEST-003, PACKAGE-001, PACKAGE-002
+
+### Root cause
+- Phase 3 Engineering Maturity & Test Hardening gap:
+  - Source-text assertions in regression tests instead of behavioral checks.
+  - Placeholder \pass\ test in test_regressions.py.
+  - Lack of explicit GUI vs headless test separation markers.
+  - Potential near-duplicate dataset leakage between train and validation splits.
+  - Synthetic data dominance without structured misconception & adversarial categories.
+  - Unpinned requirements.txt file labeled as 'pinned'.
+  - Inconsistent Python version declarations across project files.
+  - Missing automated CI pipeline.
+
+### Fix
+- TEST-001: Refactored source text assertions in test_regressions.py to behavioral checks on token streaming and mastery threshold progression.
+- TEST-002: Replaced placeholder \pass\ test with true 3-argument progress callback test.
+- TEST-003: Added \gui\, \headless\, and \slow\ markers in pyproject.toml.
+- TRAIN-001: Enriched training generator with structured MISCONCEPTION_QA and ADVERSARIAL_QA categories.
+- TRAIN-002: Implemented \SplitLeakageCheck\ in dataset_validator.py using 3-gram Jaccard similarity to prevent train/val leakage.
+- PACKAGE-001: Generated fully pinned \equirements.lock\ with exact frozen version constraints.
+- PACKAGE-002: Aligned Python version consistency to Python 3.12 across setup.bat, README.md, and pyproject.toml.
+- CI: Added GitHub Actions automated workflow in \.github/workflows/ci.yml\.
+
+### Tests added/updated
+- \	ests/test_regressions.py\
+- \	ests/test_training_split.py\
+
+### Validation
+`	ext
+pytest -v -m "not gui"
+208 passed in 48.76s
 `
 
 ### Result

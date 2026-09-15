@@ -24,6 +24,10 @@ This project was built from the ground up to demonstrate how specialized AI agen
 
 Follow these steps to set up the project on your local Windows machine.
 
+### Prerequisites
+- **Python:** 3.12.x (`>=3.12, <3.13` required for binary wheel and C++ extension compatibility)
+- **Git:** Installed and available on system PATH
+
 ### 1. Setup the Environment
 Clone the repository and run the setup script to configure your virtual environment and install dependencies:
 ```bash

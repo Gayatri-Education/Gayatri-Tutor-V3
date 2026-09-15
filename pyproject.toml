@@ -49,3 +49,8 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "gui: tests that require Qt GUI or WebEngine display (Audit #TEST-003)",
+    "headless: pure logic unit and integration tests that can run headless in CI",
+    "slow: tests that take longer than 5 seconds",
+]
