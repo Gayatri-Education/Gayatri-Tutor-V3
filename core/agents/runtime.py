@@ -107,8 +107,10 @@ class ToolRegistry:
                     f"Argument '{arg_name}' for tool '{name}' exceeds maximum string length of {TOOL_ARG_MAX_STRING_LENGTH}"
                 )
 
-        logger.info(f"Tool call: {name}({kwargs})")
-
+        # PRIV-002: Tool-argument logging for audit trail
+        audit_logger = logging.getLogger("gayatri.privacy.audit")
+        audit_logger.info(f"TOOL_AUDIT: Tool '{name}' invoked with arguments: {kwargs}")
+        logger.info(f"Tool call: {name}")
         # Enforce tool execution timeout (Audit #79)
         if spec.timeout_s and spec.timeout_s > 0:
             import concurrent.futures

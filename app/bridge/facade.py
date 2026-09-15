@@ -380,14 +380,17 @@ class Bridge(QObject):
             if provider is None:
                 return json.dumps({"valid": False, "message": f"Provider '{provider_key}' not found"})
 
-            # Temporarily set the key
-            if hasattr(provider, '_api_key'):
-                old_key = provider._api_key
-                provider._api_key = api_key
-                valid, msg = provider.validate_key()
-                provider._api_key = old_key
-            elif hasattr(provider, 'validate_key'):
-                valid, msg = provider.validate_key()
+            # P1 DESKTOP-003: Do not mutate the live provider. Create a temporary instance.
+            try:
+                temp_provider = provider.__class__(api_key=api_key)
+            except TypeError:
+                try:
+                    temp_provider = provider.__class__(api_key)
+                except TypeError:
+                    temp_provider = provider.__class__()
+
+            if hasattr(temp_provider, 'validate_key'):
+                valid, msg = temp_provider.validate_key()
             else:
                 valid, msg = False, "Provider doesn't support key validation"
 

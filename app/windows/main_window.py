@@ -11,6 +11,20 @@ from app.bridge import Bridge
 from core.config import BASE_DIR
 
 
+from PySide6.QtWebEngineCore import QWebEnginePage
+
+class SecureWebPage(QWebEnginePage):
+    """Enforces navigation hardening by only accepting local trusted UI assets."""
+    def acceptNavigationRequest(self, url, _type, isMainFrame):
+        scheme = url.scheme()
+        if scheme in ("http", "https"):
+            print(f"Blocked navigation to {url.toString()}")
+            return False
+        # Allow local files or qrc
+        if scheme in ("file", "qrc", "data"):
+            return True
+        return False
+
 class MainWindow(QMainWindow):
     """Frameless window with QWebEngineView + QWebChannel bridge."""
 
@@ -21,6 +35,8 @@ class MainWindow(QMainWindow):
 
         # WebEngine view
         self._web = QWebEngineView()
+        self._page = SecureWebPage()
+        self._web.setPage(self._page)
         self.setCentralWidget(self._web)
 
         # WebChannel + Bridge

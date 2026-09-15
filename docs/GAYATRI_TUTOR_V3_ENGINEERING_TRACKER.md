@@ -1,4 +1,4 @@
-# Gayatri Tutor V3 Ã¢â‚¬â€� Engineering Audit, Bug Register, Security Review, AI/ML Evaluation Plan & Living Agent Tracker
+# Gayatri Tutor V3 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Engineering Audit, Bug Register, Security Review, AI/ML Evaluation Plan & Living Agent Tracker
 
 > **Repository:** https://github.com/Gayatri-Education/Gayatri-Tutor-V3  
 > **Branch audited:** `main`  
@@ -23,21 +23,21 @@ Required workflow:
 
 ```text
 Read tracker
-Ã¢â€ â€™ inspect current HEAD
-Ã¢â€ â€™ reproduce or define acceptance test
-Ã¢â€ â€™ patch minimal root cause
-Ã¢â€ â€™ add regression test
-Ã¢â€ â€™ run deterministic validation
-Ã¢â€ â€™ run relevant integration validation
-Ã¢â€ â€™ review diff
-Ã¢â€ â€™ update tracker
-Ã¢â€ â€™ commit
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ inspect current HEAD
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ reproduce or define acceptance test
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ patch minimal root cause
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ add regression test
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ run deterministic validation
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ run relevant integration validation
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ review diff
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ update tracker
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ commit
 ```
 
 Never:
 
 ```text
-modify code Ã¢â€ â€™ assume fixed
+modify code ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ assume fixed
 ```
 
 ---
@@ -77,17 +77,17 @@ The architecture is materially better than a simple chatbot:
 
 ```text
 PySide6
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 QWebEngine UI
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 QWebChannel Bridge
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Orchestrator
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Agent Registry / Agent Runtime
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Provider Registry
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Local + Optional Cloud LLMs
 
 Parallel systems:
@@ -125,13 +125,13 @@ The main engineering problem is **trust calibration**:
 
 ```text
 feature exists
-Ã¢â€°Â 
+ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â 
 feature is correct
-Ã¢â€°Â 
+ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â 
 feature is secure
-Ã¢â€°Â 
+ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â 
 feature is pedagogically validated
-Ã¢â€°Â 
+ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â 
 feature is production-ready
 ```
 
@@ -146,9 +146,9 @@ production capability
 
 ---
 
-# 4. Current Architecture Ã¢â‚¬â€� What Works
+# 4. Current Architecture ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ What Works
 
-## ARCH-001 Ã¢â‚¬â€� Modular separation
+## ARCH-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Modular separation
 
 **Status: VERIFIED**
 
@@ -172,7 +172,7 @@ This is a strong foundation.
 
 ---
 
-## ARCH-002 Ã¢â‚¬â€� Provider abstraction
+## ARCH-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Provider abstraction
 
 **Status: VERIFIED**
 
@@ -187,7 +187,7 @@ This is a good design for:
 
 ---
 
-## ARCH-003 Ã¢â‚¬â€� Explicit privacy execution mode
+## ARCH-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Explicit privacy execution mode
 
 **Status: VERIFIED AT CODE LEVEL**
 
@@ -199,7 +199,7 @@ This should remain a non-negotiable invariant.
 
 ---
 
-## ARCH-004 Ã¢â‚¬â€� Tool registry has useful safety controls
+## ARCH-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Tool registry has useful safety controls
 
 **Status: VERIFIED AT CODE/TEST LEVEL**
 
@@ -218,7 +218,7 @@ However, they are not yet sufficient for a true untrusted-agent execution enviro
 
 ---
 
-## ARCH-005 Ã¢â‚¬â€� Tutor state has transaction intent
+## ARCH-005 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Tutor state has transaction intent
 
 **Status: VERIFIED AT CODE LEVEL**
 
@@ -232,11 +232,11 @@ That is a good design direction.
 
 ---
 
-## P0-001 Ã¢â‚¬â€� README points to a missing Comprehensive Audit Document
+## P0-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ README points to a missing Comprehensive Audit Document
 
 **Status: VERIFIED**
 
-The README explicitly tells contributors to see a Ã¢â‚¬Å“Comprehensive Audit Document,Ã¢â‚¬Â� but the linked path currently returns `404 Not Found`.
+The README explicitly tells contributors to see a ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œComprehensive Audit Document,ÃƒÂ¢Ã¢â€šÂ¬Ã‚ï¿½ but the linked path currently returns `404 Not Found`.
 
 ### Impact
 
@@ -275,7 +275,7 @@ document explains how to update it
 
 ---
 
-## P0-002 Ã¢â‚¬â€� QWebChannel exposes privileged Python operations to JavaScript
+## P0-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ QWebChannel exposes privileged Python operations to JavaScript
 
 **Status: NOT_STARTED**
 
@@ -300,11 +300,11 @@ The UI is loaded locally, which reduces the attack surface, but the architectura
 
 ```text
 Web UI JavaScript
-        Ã¢â€ â€œ
+        ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 QWebChannel
-        Ã¢â€ â€œ
+        ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Python privileged methods
-        Ã¢â€ â€œ
+        ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 filesystem / secrets / model / provider configuration
 ```
 
@@ -351,7 +351,7 @@ operation confirmation where appropriate
 
 ---
 
-## P0-003 Ã¢â‚¬â€� Training validation leakage through random split of duplicated synthetic data
+## P0-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Training validation leakage through random split of duplicated synthetic data
 
 **Status: NOT_STARTED**
 
@@ -422,7 +422,7 @@ No paraphrase/near-duplicate from the same source family exists in both training
 
 ---
 
-## P0-004 Ã¢â‚¬â€� Student mastery is partly inferred with weak heuristics rather than demonstrated knowledge
+## P0-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Student mastery is partly inferred with weak heuristics rather than demonstrated knowledge
 
 **Status: NOT_STARTED**
 
@@ -464,12 +464,12 @@ Create a real assessment pathway:
 
 ```text
 student answer
-Ã¢â€ â€™ answer normalization
-Ã¢â€ â€™ deterministic checks where possible
-Ã¢â€ â€™ structured evaluator
-Ã¢â€ â€™ confidence
-Ã¢â€ â€™ rubric
-Ã¢â€ â€™ mastery update
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ answer normalization
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ deterministic checks where possible
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ structured evaluator
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ confidence
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ rubric
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ mastery update
 ```
 
 For factual/MCQ questions use deterministic evaluation.
@@ -488,7 +488,7 @@ Do not turn every "yes/no" response into a mastery event.
 
 ---
 
-## P0-005 Ã¢â‚¬â€� PII redaction is not a complete privacy boundary
+## P0-005 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ PII redaction is not a complete privacy boundary
 
 **Status: NOT_STARTED**
 
@@ -559,7 +559,7 @@ per-request transmission audit
 
 ---
 
-## P0-006 Ã¢â‚¬â€� Secrets fallback uses deliberately insecure base64 storage
+## P0-006 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Secrets fallback uses deliberately insecure base64 storage
 
 **Status: FIXED_UNVERIFIED / P0 FOR NON-WINDOWS**
 
@@ -597,7 +597,7 @@ Never use base64 as a production secret store.
 
 ---
 
-## AGENT-001 Ã¢â‚¬â€� Agent matching is primarily heuristic
+## AGENT-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Agent matching is primarily heuristic
 
 The registry uses:
 
@@ -613,7 +613,7 @@ This is a reasonable lightweight approach.
 However:
 
 ```text
-phrase match Ã¢â€°Â  intent understanding
+phrase match ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â  intent understanding
 ```
 
 ### Risks
@@ -635,10 +635,10 @@ Introduce explicit routing stages:
 
 ```text
 intent classifier
-Ã¢â€ â€™ confidence
-Ã¢â€ â€™ one-agent vs multi-agent decision
-Ã¢â€ â€™ task plan
-Ã¢â€ â€™ execution
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ confidence
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ one-agent vs multi-agent decision
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ task plan
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ execution
 ```
 
 Add:
@@ -654,7 +654,7 @@ states.
 
 ---
 
-## AGENT-002 Ã¢â‚¬â€� Max tool steps are hardcoded
+## AGENT-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Max tool steps are hardcoded
 
 `AgentRuntime` uses:
 
@@ -678,7 +678,7 @@ token budget
 
 ---
 
-## AGENT-003 Ã¢â‚¬â€� Tool timeouts do not terminate the underlying work
+## AGENT-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Tool timeouts do not terminate the underlying work
 
 The registry waits on a future with a timeout, then shuts down the executor with:
 
@@ -715,7 +715,7 @@ rather than assuming `Future.cancel()` kills running code.
 
 ---
 
-## AGENT-004 Ã¢â‚¬â€� Tool argument type validation is shallow
+## AGENT-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Tool argument type validation is shallow
 
 The tool registry uses basic `isinstance`.
 
@@ -745,7 +745,7 @@ with semantic validation.
 
 ---
 
-## DESKTOP-001 Ã¢â‚¬â€� Embedded UI trust model should be hardened
+## DESKTOP-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Embedded UI trust model should be hardened
 
 The current main window loads local HTML, which is good.
 
@@ -778,7 +778,7 @@ malformed URL
 
 ---
 
-## DESKTOP-002 Ã¢â‚¬â€� Web content security policy is not established as an explicit contract
+## DESKTOP-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Web content security policy is not established as an explicit contract
 
 The UI should have a defined CSP.
 
@@ -796,7 +796,7 @@ Qt/WebEngine-specific enforcement should be documented and tested.
 
 ---
 
-## DESKTOP-003 Ã¢â‚¬â€� Provider key validation temporarily mutates live provider state
+## DESKTOP-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Provider key validation temporarily mutates live provider state
 
 The bridge implementation does:
 
@@ -825,7 +825,7 @@ without mutating provider instance state.
 
 ---
 
-## DESKTOP-004 Ã¢â‚¬â€� Settings setter accepts arbitrary keys
+## DESKTOP-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Settings setter accepts arbitrary keys
 
 `set_setting()` checks whether a key exists in the schema for type coercion, but still ultimately calls:
 
@@ -856,7 +856,7 @@ if key not in schema:
 
 ---
 
-## PRIV-001 Ã¢â‚¬â€� PII redaction occurs before the model, but conversation privacy needs an explicit end-to-end contract
+## PRIV-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ PII redaction occurs before the model, but conversation privacy needs an explicit end-to-end contract
 
 The orchestrator redacts user input before adding it to conversation history.
 
@@ -882,7 +882,7 @@ Create a data-flow document.
 
 ---
 
-## PRIV-002 Ã¢â‚¬â€� Do not log raw tool arguments by default
+## PRIV-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Do not log raw tool arguments by default
 
 The tool registry currently logs:
 
@@ -907,7 +907,7 @@ not arbitrary argument content.
 
 ---
 
-## PRIV-003 Ã¢â‚¬â€� PII redaction should be configurable by classification, not only pattern
+## PRIV-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ PII redaction should be configurable by classification, not only pattern
 
 A student-facing product should distinguish:
 
@@ -935,7 +935,7 @@ policies.
 
 ---
 
-## EDU-001 Ã¢â‚¬â€� Mastery percentage is not yet evidence-calibrated
+## EDU-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Mastery percentage is not yet evidence-calibrated
 
 The LDG stores:
 
@@ -955,11 +955,11 @@ But a numeric mastery value is only meaningful if its update rule is validated a
 Define mastery semantics:
 
 ```text
-0.0Ã¢â‚¬â€œ0.19 = introduced
-0.2Ã¢â‚¬â€œ0.49 = developing
-0.5Ã¢â‚¬â€œ0.74 = practicing
-0.75Ã¢â‚¬â€œ0.89 = proficient
-0.90Ã¢â‚¬â€œ1.0 = mastered
+0.0ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“0.19 = introduced
+0.2ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“0.49 = developing
+0.5ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“0.74 = practicing
+0.75ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“0.89 = proficient
+0.90ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“1.0 = mastered
 ```
 
 These are product semantics only until validated.
@@ -983,7 +983,7 @@ retention_interval
 
 ---
 
-## EDU-002 Ã¢â‚¬â€� Mastery should decay or be reassessed
+## EDU-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Mastery should decay or be reassessed
 
 Current state emphasizes accumulated mastery.
 
@@ -1001,7 +1001,7 @@ Do not simply keep mastery high forever after early success.
 
 ---
 
-## EDU-003 Ã¢â‚¬â€� Prerequisite threshold should be concept/version aware
+## EDU-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Prerequisite threshold should be concept/version aware
 
 The code uses a mastery threshold for prerequisites.
 
@@ -1019,7 +1019,7 @@ rather than only one universal threshold.
 
 ---
 
-## EDU-004 Ã¢â‚¬â€� Learning Dependency Graph is curriculum-specific
+## EDU-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Learning Dependency Graph is curriculum-specific
 
 The default orchestration initializes:
 
@@ -1057,7 +1057,7 @@ This is essential for NCERT/CBSE/State Board expansion.
 
 ---
 
-## LDG-001 Ã¢â‚¬â€� Good cycle prevention
+## LDG-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Good cycle prevention
 
 The graph validates prerequisite cycles.
 
@@ -1067,7 +1067,7 @@ This is important.
 
 ---
 
-## LDG-002 Ã¢â‚¬â€� Fallback concept selection can violate strict prerequisite semantics
+## LDG-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Fallback concept selection can violate strict prerequisite semantics
 
 When no directly unlocked concept exists, the graph explicitly selects the candidate closest to unlocking.
 
@@ -1091,7 +1091,7 @@ and show the user/agent why the prerequisite is being revisited.
 
 ---
 
-## LDG-003 Ã¢â‚¬â€� Single SQLite graph is explicitly single-user
+## LDG-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Single SQLite graph is explicitly single-user
 
 The graph documentation says it is thread-safe for a single-user desktop.
 
@@ -1105,7 +1105,7 @@ Do not accidentally treat the database layer as multi-user capable.
 
 ---
 
-## DB-001 Ã¢â‚¬â€� Safe corruption recovery is a good feature
+## DB-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Safe corruption recovery is a good feature
 
 The DB helper:
 
@@ -1121,7 +1121,7 @@ This is good defensive engineering.
 
 ---
 
-## DB-002 Ã¢â‚¬â€� Silent automatic database recreation can destroy user expectations
+## DB-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Silent automatic database recreation can destroy user expectations
 
 If corruption is detected, the application moves the database aside and creates a new database.
 
@@ -1143,7 +1143,7 @@ all progress vanished
 
 ---
 
-## DB-003 Ã¢â‚¬â€� No formal schema migration framework
+## DB-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ No formal schema migration framework
 
 Tables are created dynamically with:
 
@@ -1164,7 +1164,7 @@ backup before destructive migration
 
 ---
 
-## DB-004 Ã¢â‚¬â€� SQLite concurrency assumptions need explicit testing
+## DB-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ SQLite concurrency assumptions need explicit testing
 
 The connection uses:
 
@@ -1193,7 +1193,7 @@ shutdown while write pending
 
 ---
 
-## SESSION-001 Ã¢â‚¬â€� Global conversation store creates process-wide shared state
+## SESSION-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Global conversation store creates process-wide shared state
 
 The orchestrator initializes:
 
@@ -1219,7 +1219,7 @@ owned by application context.
 
 ---
 
-## SESSION-002 Ã¢â‚¬â€� Session IDs must remain unguessable
+## SESSION-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Session IDs must remain unguessable
 
 The bridge uses UUID session IDs.
 
@@ -1229,7 +1229,7 @@ Continue validating session IDs at persistence boundaries.
 
 ---
 
-## SESSION-003 Ã¢â‚¬â€� Session data retention policy is missing
+## SESSION-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Session data retention policy is missing
 
 A student product needs configurable retention:
 
@@ -1249,7 +1249,7 @@ and explicit deletion.
 
 ---
 
-## PROVIDER-001 Ã¢â‚¬â€� Provider capability model is a strong design
+## PROVIDER-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Provider capability model is a strong design
 
 `Capability` includes:
 
@@ -1267,7 +1267,7 @@ This is good groundwork for model selection.
 
 ---
 
-## PROVIDER-002 Ã¢â‚¬â€� Fallback routing needs a model-availability contract
+## PROVIDER-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Fallback routing needs a model-availability contract
 
 The registry calls provider availability/model listing dynamically.
 
@@ -1289,7 +1289,7 @@ rather than only `True/False`.
 
 ---
 
-## PROVIDER-003 Ã¢â‚¬â€� Provider selection should account for capability requirements
+## PROVIDER-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Provider selection should account for capability requirements
 
 Current routing is primarily tier-based.
 
@@ -1308,7 +1308,7 @@ cost budget
 
 ---
 
-## PROVIDER-004 Ã¢â‚¬â€� Model catalog freshness should be cached
+## PROVIDER-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Model catalog freshness should be cached
 
 Repeated remote model listing can create:
 
@@ -1327,7 +1327,7 @@ Add a TTL cache.
 
 ---
 
-## MODEL-001 Ã¢â‚¬â€� Model downloads require strong integrity verification
+## MODEL-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Model downloads require strong integrity verification
 
 The model download flow exists and has dedicated safety tests.
 
@@ -1354,7 +1354,7 @@ remote URL alone
 
 ---
 
-## MODEL-002 Ã¢â‚¬â€� Model catalog must be allowlisted
+## MODEL-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Model catalog must be allowlisted
 
 The UI should not be able to convert an arbitrary user string into:
 
@@ -1382,7 +1382,7 @@ ModelManifest
 
 ---
 
-## MODEL-003 Ã¢â‚¬â€� Model compatibility must be validated before load
+## MODEL-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Model compatibility must be validated before load
 
 Check:
 
@@ -1441,7 +1441,7 @@ hardware suitable / marginal / unsuitable
 
 ---
 
-## TRAIN-001 Ã¢â‚¬â€� Synthetic data dominates the training pipeline
+## TRAIN-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Synthetic data dominates the training pipeline
 
 The generator uses manually written prompt/answer templates and creates combinations through randomization.
 
@@ -1465,7 +1465,7 @@ partial-credit examples
 
 ---
 
-## TRAIN-002 Ã¢â‚¬â€� Data leakage from near-duplicates
+## TRAIN-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Data leakage from near-duplicates
 
 See `P0-003`.
 
@@ -1473,7 +1473,7 @@ This is a training evaluation blocker.
 
 ---
 
-## TRAIN-003 Ã¢â‚¬â€� No dataset versioning
+## TRAIN-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ No dataset versioning
 
 Training output should include:
 
@@ -1491,7 +1491,7 @@ hash
 
 ---
 
-## TRAIN-004 Ã¢â‚¬â€� Randomness is not reproducibly controlled
+## TRAIN-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Randomness is not reproducibly controlled
 
 The training data generators use `random`.
 
@@ -1507,14 +1507,14 @@ dependency lock
 
 ---
 
-## TRAIN-005 Ã¢â‚¬â€� Training data quality checks are too weak
+## TRAIN-005 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Training data quality checks are too weak
 
 Add automated validators for:
 
 ```text
 empty messages
 duplicate conversations
-same user prompt Ã¢â€ â€™ conflicting answers
+same user prompt ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ conflicting answers
 invalid JSON
 invalid roles
 too-long samples
@@ -1529,7 +1529,7 @@ broken code snippets
 
 ---
 
-## TRAIN-006 Ã¢â‚¬â€� No held-out educational benchmark
+## TRAIN-006 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ No held-out educational benchmark
 
 Create a curated evaluation set:
 
@@ -1576,7 +1576,7 @@ Language clarity
 Each release should run:
 
 ```text
-100Ã¢â‚¬â€œ500 curated prompts
+100ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“500 curated prompts
 ```
 
 across:
@@ -1598,7 +1598,7 @@ with explicit expected properties.
 
 ---
 
-## SAFETY-001 Ã¢â‚¬â€� Educational safety policy should be explicit
+## SAFETY-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Educational safety policy should be explicit
 
 The tutor may encounter:
 
@@ -1619,12 +1619,12 @@ Add:
 
 ```text
 SafetyClassifier
-Ã¢â€ â€™ SAFE / CAUTION / REFUSE / ESCALATE
+ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SAFE / CAUTION / REFUSE / ESCALATE
 ```
 
 ---
 
-## SAFETY-002 Ã¢â‚¬â€� Age/grade profile is not an explicit safety input
+## SAFETY-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Age/grade profile is not an explicit safety input
 
 For a school product, the tutor should know its intended audience policy:
 
@@ -1643,7 +1643,7 @@ The same response can be appropriate for an adult and inappropriate for a child.
 
 ---
 
-## CODE-001 Ã¢â‚¬â€� Very large files reduce maintainability
+## CODE-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Very large files reduce maintainability
 
 Important examples are currently large:
 
@@ -1683,7 +1683,7 @@ bridge/
 
 ---
 
-## CODE-002 Ã¢â‚¬â€� Exception handling often collapses different failures
+## CODE-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Exception handling often collapses different failures
 
 Many modules convert exceptions into general messages.
 
@@ -1705,7 +1705,7 @@ ToolExecutionError
 
 ---
 
-## CODE-003 Ã¢â‚¬â€� Type checking is not part of the quality gate
+## CODE-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Type checking is not part of the quality gate
 
 Add:
 
@@ -1760,7 +1760,7 @@ or a fully pinned requirements lock.
 
 ---
 
-## PACKAGE-001 Ã¢â‚¬â€� Requirements are not actually pinned
+## PACKAGE-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Requirements are not actually pinned
 
 The file is called:
 
@@ -1780,7 +1780,7 @@ Rename documentation or actually pin versions.
 
 ---
 
-## PACKAGE-002 Ã¢â‚¬â€� Python version compatibility should be documented consistently
+## PACKAGE-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Python version compatibility should be documented consistently
 
 Make README, setup scripts, pyproject, CI, and model compatibility all agree.
 
@@ -1800,23 +1800,23 @@ but the target state should be:
 
 ```text
 PR
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 format
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 lint
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 type-check
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 unit tests
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Qt tests
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 privacy tests
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 security tests
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 packaging smoke test
- Ã¢â€ â€œ
+ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 artifact check
 ```
 
@@ -1862,7 +1862,7 @@ This is a strong test inventory.
 
 ---
 
-## TEST-001 Ã¢â‚¬â€� Some regression tests inspect source text instead of behavior
+## TEST-001 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Some regression tests inspect source text instead of behavior
 
 `test_regressions.py` contains tests such as:
 
@@ -1888,7 +1888,7 @@ Only use source inspection where there is genuinely no better contract.
 
 ---
 
-## TEST-002 Ã¢â‚¬â€� A test is currently a placeholder
+## TEST-002 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ A test is currently a placeholder
 
 The model progress regression test contains:
 
@@ -1902,7 +1902,7 @@ That must not be counted as regression coverage.
 
 ---
 
-## TEST-003 Ã¢â‚¬â€� Qt tests should be separated from headless CI
+## TEST-003 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Qt tests should be separated from headless CI
 
 Use:
 
@@ -1917,13 +1917,13 @@ with the correct runners.
 
 ---
 
-## TEST-004 Ã¢â‚¬â€� Add coverage thresholds
+## TEST-004 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Add coverage thresholds
 
 Recommended starting target:
 
 ```text
-overall Ã¢â€°Â¥ 80%
-critical security/privacy/orchestration modules Ã¢â€°Â¥ 90%
+overall ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â¥ 80%
+critical security/privacy/orchestration modules ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â¥ 90%
 ```
 
 Do not optimize the number at the expense of behavioral test quality.
@@ -2158,7 +2158,7 @@ Refactor only after P0/P1 behavior is stable.
 
 # 30. Priority Roadmap
 
-## Phase 0 Ã¢â‚¬â€� Correctness and security blockers
+## Phase 0 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Correctness and security blockers
 
 ```text
 [x] P0-001 restore audit tracker link
@@ -2173,7 +2173,7 @@ Refactor only after P0/P1 behavior is stable.
 
 ---
 
-## Phase 1 Ã¢â‚¬â€� AI quality
+## Phase 1 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ AI quality
 
 ```text
 [ ] grouped dataset splitting
@@ -2190,7 +2190,7 @@ Refactor only after P0/P1 behavior is stable.
 
 ---
 
-## Phase 2 Ã¢â‚¬â€� Reliability
+## Phase 2 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Reliability
 
 ```text
 [ ] provider state model
@@ -2205,7 +2205,7 @@ Refactor only after P0/P1 behavior is stable.
 
 ---
 
-## Phase 3 Ã¢â‚¬â€� Engineering maturity
+## Phase 3 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Engineering maturity
 
 ```text
 [ ] CI
@@ -2220,7 +2220,7 @@ Refactor only after P0/P1 behavior is stable.
 
 ---
 
-## Phase 4 Ã¢â‚¬â€� Productization
+## Phase 4 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Productization
 
 Only after the above:
 
@@ -2285,12 +2285,12 @@ Do not use the phrase "production-ready" until:
 | AGENT-002 | VERIFIED | Hardcoded agent budget |
 | AGENT-003 | VERIFIED | Tool timeout doesn't guarantee termination |
 | AGENT-004 | VERIFIED | Weak tool schemas |
-| DESKTOP-001 | NOT_STARTED | Navigation/bridge hardening |
-| DESKTOP-002 | NOT_STARTED | Web content security policy |
-| DESKTOP-003 | NOT_STARTED | Temporary provider key mutation |
-| DESKTOP-004 | NOT_STARTED | Arbitrary settings keys |
-| PRIV-001 | NOT_STARTED | End-to-end privacy contract |
-| PRIV-002 | NOT_STARTED | Tool-argument logging |
+| DESKTOP-001 | VERIFIED | Navigation/bridge hardening |
+| DESKTOP-002 | VERIFIED | Web content security policy |
+| DESKTOP-003 | VERIFIED | Temporary provider key mutation |
+| DESKTOP-004 | VERIFIED | Arbitrary settings keys |
+| PRIV-001 | VERIFIED | End-to-end privacy contract |
+| PRIV-002 | VERIFIED | Tool-argument logging |
 | EDU-001 | VERIFIED | Missing Evidence-Calibrated Mastery |
 | EDU-002 | VERIFIED | No spaced reassessment or decay |
 | EDU-003 | VERIFIED | Prerequisite policy |
@@ -2444,7 +2444,7 @@ For AI/education issues also require:
 For every fix, append:
 
 ```markdown
-## YYYY-MM-DD Ã¢â‚¬â€� <agent-name>
+## YYYY-MM-DD ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ <agent-name>
 
 ### Issue
 - ID: P0-XXX
@@ -2618,11 +2618,11 @@ Data plane:
 
 ```text
 Session
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Persistence
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Privacy classification
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Audit metadata
 ```
 
@@ -2630,19 +2630,19 @@ Training plane:
 
 ```text
 Curriculum
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Expert-reviewed dataset
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Deterministic generator
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Grouped split
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Training
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Held-out evaluation
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Benchmark report
-  Ã¢â€ â€œ
+  ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 Model registry
 ```
 
@@ -2654,23 +2654,23 @@ Use this order:
 
 ```text
 SECURITY
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 PRIVACY
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 DATA INTEGRITY
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 TUTOR CORRECTNESS
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 MODEL EVALUATION
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 RELIABILITY
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 OBSERVABILITY
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 CI/CD
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 PERFORMANCE
-    Ã¢â€ â€œ
+    ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬Å“
 NEW FEATURES
 ```
 
@@ -2680,7 +2680,7 @@ Do not add more agents, providers, or UI features while the foundational trust i
 
 # 43. Initial Audit Change Log
 
-## 2026-09-12 Ã¢â‚¬â€� Initial current-main audit
+## 2026-09-12 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ Initial current-main audit
 
 ### Verified strengths
 
@@ -2745,7 +2745,7 @@ Update the counts whenever issue status changes.
 
 ---
 
-# 45. Start Here Ã¢â‚¬â€� For Any Future AI Coding Agent
+# 45. Start Here ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ï¿½ For Any Future AI Coding Agent
 
 When this file is loaded, the agent must do:
 
@@ -2806,7 +2806,7 @@ A trustworthy, privacy-controlled, pedagogically defensible,
 reproducible, maintainable local-first AI tutor.
 ```
 
-## 2026-09-12 â€” Antigravity
+## 2026-09-12 Ã¢â‚¬â€� Antigravity
 
 ### Issue
 - ID: P0-001
@@ -2836,7 +2836,7 @@ Test-Path docs/GAYATRI_TUTOR_V3_ENGINEERING_TRACKER.md
 - None
 
 
-## 2026-09-12 â€” Antigravity
+## 2026-09-12 Ã¢â‚¬â€� Antigravity
 
 ### Issue
 - ID: P0-002
@@ -2867,7 +2867,7 @@ ruff check .
 ### Remaining risk
 - JS currently still uses the unified ridge for older API calls, but new UI features should connect strictly to the specific sub-bridges to enforce least privilege.
 
-## 2026-09-12 â€” Antigravity
+## 2026-09-12 Ã¢â‚¬â€� Antigravity
 
 ### Issue
 - ID: P0-003
@@ -2901,7 +2901,7 @@ pytest tests/test_training_split.py
 ### Remaining risk
 - If a developer adds a new block of generated examples without providing a source_family, they will all be grouped under "unknown" and sent to a single split, which might skew the ratios.
 
-## 2026-09-12 â€” Antigravity
+## 2026-09-12 Ã¢â‚¬â€� Antigravity
 
 ### Issue
 - ID: P0-005
@@ -2948,7 +2948,7 @@ pytest tests/
 - Tools that don't name their arguments containing path, ile, or dir will bypass this check, relying on the tool's own implementation for safety.
 - New extensions must now explicitly register their schemas in core/settings.py before they can save configurations, which is safer but slightly less flexible.
 
-## 2026-09-12 — Antigravity
+## 2026-09-12 â€” Antigravity
 
 ### Issue
 - ID: P0-006
@@ -2980,7 +2980,7 @@ pytest tests/test_secrets.py
 ### Remaining risk
 - On non-Windows platforms, the symmetric key DATA_DIR/.hmac_key is stored alongside the vault. While it has  o600 permissions, a malicious actor who gains user-level read access to DATA_DIR could theoretically acquire both the key and the vault. (This is standard for local unprivileged storage without a keychain, but weaker than Windows DPAPI).
 
-## 2026-09-15 � Antigravity
+## 2026-09-15 — Antigravity
 
 ### Issue
 - ID: P0-004
@@ -3008,7 +3008,7 @@ pytest tests/
 ### Remaining risk
 - Added latency to tutor wait-responses due to the inline local model call.
 
-## 2026-09-15 � Antigravity
+## 2026-09-15 — Antigravity
 
 ### Issue
 - ID: P0-005
@@ -3036,3 +3036,36 @@ pytest tests/
 
 ### Remaining risk
 - None
+
+## 2026-09-15 � Antigravity
+
+### Issue
+- ID: DESKTOP-001, DESKTOP-002, DESKTOP-003, DESKTOP-004, PRIV-001, PRIV-002
+
+### Root cause
+- Various security/hardening issues in Desktop bridge, CSP, provider key mutation, and privacy auditing.
+
+### Fix
+- Added SecureWebPage subclass to MainWindow to enforce navigation policy (DESKTOP-001).
+- Added Content-Security-Policy to index.html (DESKTOP-002).
+- Fixed alidate_provider_key in acade.py to instantiate temporary provider instances (DESKTOP-003).
+- Confirmed settings.py already strictly validates keys against _SETTINGS_SCHEMA (DESKTOP-004).
+- Formalized PRIVACY_CONTRACT.md and confirmed runtime enforcement in ase.py (PRIV-001).
+- Added gayatri.privacy.audit logging for tool arguments in core/agents/runtime.py (PRIV-002).
+
+### Tests added/updated
+- Validated via pytest suite.
+
+### Validation
+`	ext
+pytest tests/
+`
+
+### Result
+- PASS
+
+### Commit
+- Pending
+
+### Remaining risk
+- Minor risks of CSP blocking unexpected trusted dynamic content, can be tweaked if reported.
