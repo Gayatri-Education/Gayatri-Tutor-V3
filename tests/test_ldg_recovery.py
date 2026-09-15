@@ -1,5 +1,4 @@
 
-import pytest
 from core.tutor_engine import TutorEngine, RecoveryMode
 from core.knowledge_graph import LearningDependencyGraph
 

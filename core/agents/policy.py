@@ -10,7 +10,6 @@ class AgentPolicy:
 
 class CancelledError(Exception):
     """Raised when a cooperative tool is cancelled."""
-    pass
 
 class CancellationToken:
     def __init__(self):

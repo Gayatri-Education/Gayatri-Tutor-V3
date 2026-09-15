@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
 from pathlib import Path
 from typing import Any
 
-from core.knowledge_graph import Concept, LearningDependencyGraph
+from core.knowledge_graph import LearningDependencyGraph
 
 logger = logging.getLogger("gayatri.curriculum.adapters")
 

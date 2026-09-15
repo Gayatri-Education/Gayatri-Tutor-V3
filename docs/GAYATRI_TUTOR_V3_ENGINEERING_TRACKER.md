@@ -2248,6 +2248,18 @@ Only after the above:
 [x] root CHANGELOG.md
 [x] root RELEASE_NOTES.md
 ```
+
+---
+
+## Phase 6 — Quality Assurance & Code Audit
+
+```text
+[ ] install strict static analysis tools
+[ ] eliminate dead code, unused imports, and unreachable blocks
+[ ] audit all exception handling blocks for silent failures
+[ ] trim bloated dependencies from requirements.txt
+[ ] audit cross-platform path handling
+```
 ---
 
 # 31. Acceptance Gate: "Production-Ready"

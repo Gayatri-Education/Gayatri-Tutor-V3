@@ -13,9 +13,8 @@ Verifies:
 """
 
 import time
-import pytest
-from core.knowledge_graph import LearningDependencyGraph, Concept
-from core.tutor_engine import TutorEngine, TutorContext
+from core.knowledge_graph import LearningDependencyGraph
+from core.tutor_engine import TutorEngine
 from core.orchestrator import Orchestrator, TurnOptions, _evaluate_tutor_response
 
 
@@ -295,7 +294,7 @@ class TestStalenessGuardAndQuestionHandling:
         ctx.last_interaction_time = time.time() - 2100
 
         # User sends a short message ("ok") which would normally evaluate to False
-        _evaluate_tutor_response(session_id, "ok", "", tutor=tutor, ldg=ldg)
+        _evaluate_tutor_response(session_id, "ok", tutor=tutor, ldg=ldg)
 
         # Mastery must remain unchanged because question expired
         assert ctx.mastery == 0.5
@@ -319,7 +318,7 @@ class TestStalenessGuardAndQuestionHandling:
         tutor.set_waiting_for_answer(session_id)
 
         # Student starts with "no" but asks a clarifying question: "no, wait, what is a variable?"
-        _evaluate_tutor_response(session_id, "no, wait, what is a variable?", "", tutor=tutor, ldg=ldg)
+        _evaluate_tutor_response(session_id, "no, wait, what is a variable?", tutor=tutor, ldg=ldg)
 
         # Must not be penalized!
         assert ctx.mastery == 0.6

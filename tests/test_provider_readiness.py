@@ -11,9 +11,7 @@ Verifies fixes for Audit issues:
 """
 
 from unittest.mock import MagicMock, patch
-import pytest
 
-from core.config import ExecutionMode
 from core.orchestrator import Orchestrator, TurnOptions
 from core.providers.anthropic import AnthropicProvider
 from core.providers.base import (
@@ -380,7 +378,6 @@ class TestPostBatchBCohesionAndRegression:
         assert getattr(reg_google, "_api_key") == "test-new-google-key"
 
     def test_orchestrator_system_prompt_and_agent_context_model_override(self, monkeypatch, tmp_path):
-        from core.agents.runtime import AgentContext
         from core.providers.local import LocalProvider
 
         settings = SettingsStore(tmp_path / "settings.json")

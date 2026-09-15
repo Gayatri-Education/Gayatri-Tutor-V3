@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import MagicMock
 from core.orchestrator import Orchestrator
 from app.bridge import Bridge
 
@@ -88,7 +87,7 @@ def test_submit_agent_error_status_and_transaction_rollback(tmp_path, monkeypatc
     """Verify when an agent returns status=ERROR, submit returns status=ERROR and rolls back tutor transaction."""
     from core.knowledge_graph import LearningDependencyGraph
     from core.tutor_engine import TutorEngine
-    from core.agents.registry import AgentResponse, AgentSpec
+    from core.agents.registry import AgentResponse
     from core.orchestrator import TurnOptions
 
     ldg = LearningDependencyGraph(tmp_path / "ldg.db")

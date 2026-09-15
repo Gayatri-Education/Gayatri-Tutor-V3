@@ -1,6 +1,5 @@
 """Tests for Phase 5: Signed Release Packaging and Verification."""
 
-import pytest
 from pathlib import Path
 from core.security.signatures import ManifestSigner
 from scripts.package_release import package_release

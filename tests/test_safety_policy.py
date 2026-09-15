@@ -1,7 +1,6 @@
 ﻿"""Tests for Safety and Academic Integrity Policy (Phase 4)."""
 
-import pytest
-from core.safety import SafetyPolicyEngine, GradeBand
+from core.safety import SafetyPolicyEngine
 
 
 def test_safety_policy_normal_query_allowed():

@@ -43,7 +43,6 @@ MEDIA_TYPE_PARAMS = "application/vnd.ollama.image.params"
 
 class OllamaPullError(Exception):
     """Error pulling model from Ollama registry."""
-    pass
 
 
 def validate_model_allowlist(namespace: str, name: str) -> None:

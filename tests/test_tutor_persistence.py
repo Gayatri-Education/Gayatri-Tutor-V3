@@ -1,4 +1,3 @@
-import pytest
 from core.session import SessionStore
 from core.tutor_engine import TutorContext, TutorEngine
 from core.knowledge_graph import LearningDependencyGraph

@@ -2,7 +2,7 @@
 import time
 import pytest
 from core.agents.runtime import ToolRegistry
-from core.agents.policy import cooperative_tool, check_cancelled, CancelledError, get_cancellation_token
+from core.agents.policy import cooperative_tool, check_cancelled, get_cancellation_token
 
 def test_timeout_fires_and_cancels_token():
     tools = ToolRegistry()

@@ -1,7 +1,5 @@
 """Tests for Indian PII expansion, Verhoeff/Luhn checksum verification, and credential redaction (Batch F)."""
 
-import re
-import pytest
 from core.privacy import PIIRedactor, validate_verhoeff, validate_luhn
 from core.logging_setup import _redact
 

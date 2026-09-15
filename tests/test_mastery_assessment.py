@@ -45,31 +45,31 @@ def test_evaluate_tutor_response_mastery_update(monkeypatch, tmp_path):
     ctx.waiting_for_answer = True
 
     # Test: Uncertain answer (long but not clearly correct/incorrect)
-    _evaluate_tutor_response("test_session", "well, I was thinking about it and I am not really sure what the exact answer would be here", "")
+    _evaluate_tutor_response("test_session", "well, I was thinking about it and I am not really sure what the exact answer would be here")
     assert ctx.mastery == 0.5  # unchanged!
 
     old_mastery = ctx.mastery
     
     # Test: "I don't know"
     ctx.waiting_for_answer = True
-    _evaluate_tutor_response("test_session", "i don't know", "")
+    _evaluate_tutor_response("test_session", "i don't know")
     assert ctx.mastery < old_mastery  # Decreased because incorrect
 
     # Test: Correct answer
     old_mastery = ctx.mastery
     ctx.waiting_for_answer = True
-    _evaluate_tutor_response("test_session", "yes, I think it is", "")
+    _evaluate_tutor_response("test_session", "yes, I think it is")
     assert ctx.mastery > old_mastery  # Increased because correct
 
     # Test: Short incorrect
     old_mastery = ctx.mastery
     ctx.waiting_for_answer = True
-    _evaluate_tutor_response("test_session", "ok", "")
+    _evaluate_tutor_response("test_session", "ok")
     assert ctx.mastery < old_mastery  # Decreased
 
     # Test: Long incorrect
     old_mastery = ctx.mastery
     ctx.waiting_for_answer = True
-    _evaluate_tutor_response("test_session", "nope that is definitely not right and I disagree with this entire concept completely", "")
+    _evaluate_tutor_response("test_session", "nope that is definitely not right and I disagree with this entire concept completely")
     assert ctx.mastery < old_mastery  # Decreased
 

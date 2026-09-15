@@ -1,11 +1,9 @@
 ﻿"""Tests for Windows Release Lifecycle: Installation, Upgrade, and Rollback (Acceptance Gate)."""
 
-import pytest
 import sqlite3
 import shutil
 from pathlib import Path
 
-from core.db import get_safe_db_connection, run_migrations
 from core.profile import ProfileManager, DEFAULT_PROFILE_ID
 from core.session import SessionStore
 from scripts.package_release import package_release

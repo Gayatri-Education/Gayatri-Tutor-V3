@@ -1,6 +1,5 @@
 ﻿"""Tests for CBSE and NCERT curriculum adapters (Phase 4)."""
 
-import pytest
 from pathlib import Path
 from core.curriculum.adapters import CBSECurriculumAdapter, NCERTCurriculumAdapter
 from core.knowledge_graph import LearningDependencyGraph

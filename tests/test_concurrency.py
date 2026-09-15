@@ -17,13 +17,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 
 from core.conversation import ConversationStore
-from core.knowledge_graph import Concept, LearningDependencyGraph
-from core.orchestrator import Orchestrator, TurnOptions
+from core.knowledge_graph import LearningDependencyGraph
+from core.orchestrator import Orchestrator
 from core.providers.local import LocalProvider
-from core.tutor_engine import TutorContext, TutorEngine, get_tutor_engine, reset_tutor_engine
+from core.tutor_engine import TutorEngine, get_tutor_engine, reset_tutor_engine
 
 
 class TestTutorEngineConcurrency:

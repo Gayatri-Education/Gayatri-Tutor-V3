@@ -12,7 +12,6 @@ import re
 import traceback
 import uuid
 from dataclasses import dataclass
-from typing import Any
 
 logger = logging.getLogger("gayatri.errors")
 

@@ -8,7 +8,6 @@ from core.model_fetch.ollama_pull import (
     OllamaPullError,
     pull_model,
 )
-from core.config import MODELS_DIR
 
 
 def test_model_allowlist_enforcement():

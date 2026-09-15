@@ -206,7 +206,7 @@ class LocalProvider:
             pass
 
         try:
-            import llama_cpp  # verify dependency without loading model
+            import llama_cpp  # noqa: F401
         except ImportError:
             return {
                 "available": False,

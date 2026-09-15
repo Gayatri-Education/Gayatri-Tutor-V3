@@ -1,6 +1,6 @@
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 import logging
 from core.tutor_engine import TutorEngine
 

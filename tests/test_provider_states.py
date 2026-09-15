@@ -1,14 +1,11 @@
 ﻿"""Tests for PROVIDER-002 (ProviderStatus), PROVIDER-003 (Capability-aware routing), and PROVIDER-004 (Catalog caching)."""
 
-import pytest
 from core.providers.base import (
     LLMProvider,
     ModelInfo,
     SpeedTier,
     Capability,
     ProviderStatus,
-    ChatMessage,
-    ChatOptions,
     ChatResponse,
 )
 from core.providers.registry import ProviderRegistry

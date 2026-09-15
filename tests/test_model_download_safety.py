@@ -9,15 +9,12 @@ Verifies fixes for Audit issues:
 
 import hashlib
 import json
-import os
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 
 from core.model_fetch.ollama_pull import (
     OllamaPullError,
     _download_blob,
-    _verify_sha256,
     check_disk_space,
     cleanup_partial_downloads,
     get_model_metadata,

@@ -151,7 +151,7 @@ def _inject_tutor_context(context: AgentContext, session_id: str,
         logger.error(f"Failed to inject tutor context: {exc}")
 
 
-def _evaluate_tutor_response(session_id: str, user_message: str, agent_response: str,
+def _evaluate_tutor_response(session_id: str, user_message: str,
                              tutor: Any = None, ldg: Any = None) -> None:
     """Evaluate student response and update LDG mastery.
 
@@ -460,7 +460,7 @@ class Orchestrator:
                     tutor_txn = tutor_eng.begin_transaction(session_id)
 
                 _evaluate_tutor_response(
-                    session_id, user_message, "",
+                    session_id, user_message,
                     tutor=tutor_eng, ldg=self.get_ldg()
                 )
                 _inject_tutor_context(
@@ -625,7 +625,7 @@ class Orchestrator:
                     tutor_txn = tutor_eng.begin_transaction(session_id)
 
                 _evaluate_tutor_response(
-                    session_id, user_message, "",
+                    session_id, user_message,
                     tutor=tutor_eng, ldg=self.get_ldg()
                 )
                 _inject_tutor_context(

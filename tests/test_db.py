@@ -1,7 +1,5 @@
 """Tests for safe database access."""
 
-import sqlite3
-import pytest
 from pathlib import Path
 from core.db import get_safe_db_connection
 

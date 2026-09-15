@@ -1,6 +1,5 @@
 """Tests for session persistence."""
 
-import pytest
 from pathlib import Path
 from core.session import SessionStore
 

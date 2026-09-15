@@ -29,7 +29,6 @@ OFFICIAL_TRUST_ANCHORS: list[str] = [
 
 class CryptographicError(Exception):
     """Base exception for signature verification or key management errors."""
-    pass
 
 
 def canonicalize_json(data: dict[str, Any] | list[Any]) -> bytes:

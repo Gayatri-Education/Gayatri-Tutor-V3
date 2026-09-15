@@ -24,7 +24,7 @@ class AgentContext:
 
 
 from pydantic import BaseModel, ValidationError, field_validator
-from core.config import DATA_DIR, TOOL_ARG_MAX_STRING_LENGTH
+from core.config import TOOL_ARG_MAX_STRING_LENGTH
 
 @dataclass
 class ToolSpec:

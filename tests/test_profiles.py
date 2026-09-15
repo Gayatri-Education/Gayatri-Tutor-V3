@@ -1,8 +1,7 @@
 ﻿"""Tests for Multi-User Profile Architecture (Phase 4)."""
 
-import pytest
 from pathlib import Path
-from core.profile import ProfileManager, UserProfile, DEFAULT_PROFILE_ID
+from core.profile import ProfileManager, DEFAULT_PROFILE_ID
 from core.session import SessionStore
 
 

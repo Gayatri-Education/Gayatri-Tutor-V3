@@ -1,10 +1,8 @@
 
-import pytest
 import time
 from core.tutor_engine import MasteryLevel, mastery_level, TutorContext, TutorEngine
 from core.knowledge_graph import LearningDependencyGraph
 from core.tutor.decay import MasteryDecayScheduler
-import sqlite3
 from datetime import datetime, timezone, timedelta
 
 def test_mastery_level_mapping():

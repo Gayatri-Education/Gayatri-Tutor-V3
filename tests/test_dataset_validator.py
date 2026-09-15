@@ -1,6 +1,5 @@
 
-import pytest
-from training.validators.dataset_validator import DatasetValidator, ValidationError
+from training.validators.dataset_validator import DatasetValidator
 
 def test_clean_dataset_passes():
     validator = DatasetValidator()

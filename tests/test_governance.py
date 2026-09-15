@@ -1,6 +1,5 @@
 ﻿"""Tests for Teacher and Parent Governance Controls (Phase 4)."""
 
-import pytest
 import json
 from pathlib import Path
 from core.governance import GovernanceManager

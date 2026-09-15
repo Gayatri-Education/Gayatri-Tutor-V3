@@ -1,7 +1,5 @@
-import pytest
 import os
 import json
-from pathlib import Path
 from core.security.secrets import SecretsVault
 
 def test_secrets_vault_fernet_fallback(tmp_path):

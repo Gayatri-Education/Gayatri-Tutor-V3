@@ -1,7 +1,7 @@
 
 import pytest
 from typing import Literal
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 from core.agents.runtime import ToolRegistry, FileToolInput
 from core.config import TOOL_ARG_MAX_STRING_LENGTH
 

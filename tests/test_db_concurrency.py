@@ -3,7 +3,6 @@
 import sqlite3
 import threading
 from pathlib import Path
-import pytest
 
 from core.db import (
     get_safe_db_connection,

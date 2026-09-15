@@ -1,21 +1,13 @@
 """Tests for Settings validation, encoding, and error sanitization (Audit #19, #27, #28, #29)."""
 
 import json
-import socket
-from pathlib import Path
 import pytest
 
 from core.errors import SanitizedError, sanitize_error, sanitize_message
 from core.settings import (
     ALLOWED_PRIVACY_MODES,
     ALLOWED_ROUTER_PREFERENCES,
-    ALLOWED_THEMES,
-    MAX_MAX_TOKENS,
-    MAX_TEMPERATURE,
-    MIN_MAX_TOKENS,
-    MIN_TEMPERATURE,
     SettingsStore,
-    validate_setting,
 )
 
 
@@ -346,7 +338,6 @@ class TestPostAuditRegressionFixes:
     def test_tutor_engine_set_context(self, tmp_path):
         """TutorEngine.set_context updates in-memory state and persists to store."""
         from core.knowledge_graph import LearningDependencyGraph
-        from core.session import SessionStore
         from core.tutor_engine import TutorContext, TutorEngine
 
         ldg = LearningDependencyGraph(db_path=tmp_path / "ldg.db")

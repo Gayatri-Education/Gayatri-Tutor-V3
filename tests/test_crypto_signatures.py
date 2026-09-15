@@ -1,13 +1,10 @@
 """Tests for Phase 5: Cryptographic Signing and Integrity Engine."""
 
-import json
 import pytest
 from pathlib import Path
 from core.security.signatures import (
     ManifestSigner,
     ManifestVerifier,
-    CryptographicError,
-    canonicalize_json,
 )
 from core.model_fetch.ollama_pull import ModelManifest, pull_model, OllamaPullError
 

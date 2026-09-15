@@ -1,5 +1,4 @@
 
-import pytest
 from core.curriculum.provider import CurriculumProvider
 from core.knowledge_graph import LearningDependencyGraph
 

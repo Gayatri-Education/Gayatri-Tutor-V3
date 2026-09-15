@@ -11,9 +11,7 @@ Covers:
 """
 
 import json
-import sqlite3
 import threading
-from pathlib import Path
 import pytest
 
 from core.conversation import Conversation
@@ -317,7 +315,7 @@ class TestOrchestratorAndBridgeSessionSync:
 
     def test_tutor_engine_clear_session_resets_in_memory_context(self):
         """Verify TutorEngine.clear_session resets in-memory context."""
-        from core.tutor_engine import TutorEngine, TutorContext
+        from core.tutor_engine import TutorEngine
         from core.knowledge_graph import LearningDependencyGraph
 
         ldg = LearningDependencyGraph()

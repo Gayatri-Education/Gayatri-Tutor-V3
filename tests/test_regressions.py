@@ -3,8 +3,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
-import inspect
 from core.privacy import PIIRedactor
 from core.agents.default_agents import _get_tutor_context
 from core.agents.runtime import AgentContext

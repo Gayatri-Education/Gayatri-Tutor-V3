@@ -268,7 +268,6 @@ class OpenAICompatibleProvider(LLMProvider):
         self.check_privacy_policy()
         opts = options or ChatOptions()
         httpx = self._get_client()
-        start = time.time()
 
         payload = {
             "model": "",

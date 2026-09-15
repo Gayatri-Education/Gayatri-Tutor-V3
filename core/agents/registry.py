@@ -244,7 +244,6 @@ class AgentSpec:
 
 class ModelUnavailableError(Exception):
     """Raised when the local model is unavailable or fails inference."""
-    pass
 
 
 @dataclass

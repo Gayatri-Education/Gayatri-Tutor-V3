@@ -12,10 +12,8 @@ import json
 import logging
 import sqlite3
 import threading
-from dataclasses import dataclass
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any
 
 from core.db import get_safe_db_connection
 from core.knowledge_graph import LearningDependencyGraph
