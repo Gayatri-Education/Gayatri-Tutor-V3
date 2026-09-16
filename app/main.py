@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QApplication
 from core.config import WINDOW_HEIGHT, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, WINDOW_WIDTH
 from core.logging_setup import setup_logging
 
-logger = setup_logging()
+import os
+logger = setup_logging(os.environ.get("GAYATRI_LOG_LEVEL", "DEBUG"))
 
 
 def main():

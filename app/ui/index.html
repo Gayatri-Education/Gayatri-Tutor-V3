@@ -692,7 +692,7 @@
     var allAgents = [];
 
     // ── QWebChannel setup ──
-    new QWebChannel(qt.webChannelTransport, function(channel) {
+    new QWebChannel(qt.webChannelTransport, async function(channel) {
       bridge = channel.objects.bridge;
 
       // Signal handlers
@@ -712,7 +712,7 @@
 
       // Initial loads
       updateModelStatus();
-      populateAgentSelect();
+      await populateAgentSelect();
     });
 
     // ── Tab Navigation (Audit #50 & #51) ──
@@ -746,10 +746,10 @@
     }
 
     // ── Agent Selector (Audit #52 & #53) ──
-    function populateAgentSelect() {
+    async function populateAgentSelect() {
       if (!bridge || typeof bridge.get_agents !== 'function') return;
       try {
-        var res = JSON.parse(bridge.get_agents());
+        var res = JSON.parse(await bridge.get_agents());
         if (res && res.ok && res.agents) {
           allAgents = res.agents;
           var select = document.getElementById('agentSelect');
@@ -768,8 +768,8 @@
       }
     }
 
-    function loadAgentsTab() {
-      populateAgentSelect();
+    async function loadAgentsTab() {
+      await populateAgentSelect();
       var container = document.getElementById('agentsContainer');
       if (!allAgents || allAgents.length === 0) {
         container.innerHTML = '<div style="color:#8a8a9a;">No agents registered.</div>';
@@ -818,10 +818,10 @@
     }
 
     // ── Courses Tab (Audit #55) ──
-    function loadCoursesTab() {
+    async function loadCoursesTab() {
       if (!bridge || typeof bridge.get_curriculum_progress !== 'function') return;
       try {
-        var res = JSON.parse(bridge.get_curriculum_progress());
+        var res = JSON.parse(await bridge.get_curriculum_progress());
         if (!res || !res.ok) return;
 
         var stats = res.stats || {};
@@ -869,11 +869,11 @@
     }
 
     // ── Settings Tab ──
-    function loadSettingsTab() {
+    async function loadSettingsTab() {
       if (!bridge) return;
       try {
         // Privacy mode
-        var mode = JSON.parse(bridge.get_setting('privacy_mode'));
+        var mode = JSON.parse(await bridge.get_setting('privacy_mode'));
         if (mode) {
           document.getElementById('privacyModeSelect').value = mode;
         }
@@ -893,10 +893,10 @@
       }
     }
 
-    function loadSessionsList() {
+    async function loadSessionsList() {
       if (!bridge || typeof bridge.get_sessions !== 'function') return;
       try {
-        var res = JSON.parse(bridge.get_sessions());
+        var res = JSON.parse(await bridge.get_sessions());
         var container = document.getElementById('sessionsListContainer');
         container.innerHTML = '';
         if (!res || !res.ok || !res.sessions || res.sessions.length === 0) {
@@ -922,7 +922,7 @@
       }
     }
 
-    function switchSession(sessId) {
+    async function switchSession(sessId) {
       if (bridge && typeof bridge.load_session_id === 'function') {
         bridge.load_session_id(sessId);
         switchTab('chat', document.querySelector('.sidebar-btn[title="Chat"]'));
@@ -954,7 +954,7 @@
         return;
       }
       if (bridge && typeof bridge.validate_provider_key === 'function') {
-        var res = JSON.parse(bridge.validate_provider_key(providerKey, keyVal));
+        var res = JSON.parse(await bridge.validate_provider_key(providerKey, keyVal));
         alert(res.valid ? 'Key is valid!' : 'Validation failed: ' + res.message);
       }
     }
@@ -990,9 +990,9 @@
     }
 
     // ── Model status ──
-    function updateModelStatus() {
+    async function updateModelStatus() {
       try {
-        var status = JSON.parse(bridge.get_local_model_status());
+        var status = JSON.parse(await bridge.get_local_model_status());
         var dot = document.getElementById('statusDot');
         var text = document.getElementById('statusText');
         var detail = document.getElementById('localModelDetail');

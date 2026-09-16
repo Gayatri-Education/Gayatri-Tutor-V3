@@ -37,11 +37,17 @@ setup.bat
 ```
 
 ### 2. Launch the Application
-Once the dependencies are installed and the model is acquired, simply run the launch script:
+Once the dependencies are installed and the model is acquired, you can run the application normally:
 ```bash
 launch.bat
 ```
-*(Alternatively, you can manually activate the environment and run `python -m app.main`)*
+
+**Debug Mode:**
+If you want to view real-time application logs (useful for checking agent dispatches, model loading, and database queries), use the debug script instead:
+```bash
+run_gayatri.bat
+```
+*(Alternatively, you can manually activate the environment and run `python -m app.main` with the `GAYATRI_LOG_LEVEL=DEBUG` environment variable set)*
 
 ---
 
