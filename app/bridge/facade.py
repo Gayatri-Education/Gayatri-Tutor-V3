@@ -128,6 +128,9 @@ class Bridge(QObject):
 
         def _worker():
             try:
+                import time
+                buffer = []
+                last_emit = time.time()
                 for token, is_done in orch.stream(message, session_id=generation_session_id, options=opts):
                     # Verify session hasn't switched during generation (Audit #134)
                     if self._session_id != generation_session_id:
@@ -138,7 +141,13 @@ class Bridge(QObject):
                         break
 
                     if token:
-                        self.token.emit(0, token)
+                        buffer.append(token)
+
+                    now = time.time()
+                    if buffer and (now - last_emit >= 0.05 or is_done):
+                        self.token.emit(0, "".join(buffer))
+                        buffer.clear()
+                        last_emit = now
 
                     if is_done:
                         self._save_session_by_id(generation_session_id)

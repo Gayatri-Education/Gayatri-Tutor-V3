@@ -11,6 +11,7 @@ import logging
 import re
 import sqlite3
 import threading
+import queue
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,41 @@ class SessionStore:
         self._lock = threading.RLock()
         self._db_conn: sqlite3.Connection | None = None
         self._create_schema()
+        
+        # Async Write Queue (Phase 3 Optimization)
+        import queue
+        self._write_queue = queue.Queue()
+        self._shutdown_event = threading.Event()
+        self._writer_thread = threading.Thread(target=self._writer_loop, daemon=True, name="Gayatri-DBWriter")
+        self._writer_thread.start()
+
+    def _writer_loop(self):
+        """Background thread consuming the async DB write queue."""
+        while not self._shutdown_event.is_set() or not self._write_queue.empty():
+            try:
+                task = self._write_queue.get(timeout=0.1)
+                func, args, kwargs = task
+                try:
+                    func(*args, **kwargs)
+                except Exception as e:
+                    logger.error(f"Async DB write failed: {e}")
+                self._write_queue.task_done()
+            except queue.Empty:
+                pass
+                
+    def flush(self):
+        """Block until all pending async writes are written to disk."""
+        self._write_queue.join()
+
+    def shutdown(self):
+        """Gracefully shutdown the DB writer thread."""
+        self._shutdown_event.set()
+        if self._writer_thread.is_alive():
+            self._writer_thread.join(timeout=2.0)
+            
+    def _enqueue_write(self, func, *args, **kwargs):
+        """Put a DB write task onto the background queue."""
+        self._write_queue.put((func, args, kwargs))
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -114,22 +150,23 @@ class SessionStore:
         logger.info(f"Session DB ready: {self.db_path}")
 
     def save_session(self, session_id: str, conversation: Any, tutor_context: Any = None) -> None:
-        """Save a conversation and optional tutor context to the database.
-
-        Uses O(1) incremental appending (Audit #30) when previous messages match,
-        avoiding O(N^2) table thrashing and autoincrement sequence churning.
-        Validates session_id format strictly (Audit #132 & #133).
-
-        Args:
-            session_id: Unique session identifier
-            conversation: Conversation object with get_all() method (or list of dicts)
-            tutor_context: Optional TutorContext object
-        """
+        """Queue a session for async background saving (Audit #28)."""
         session_id = validate_session_id(session_id)
+        
+        # Deepcopy the state we need before queueing it to avoid race conditions!
+        title = getattr(conversation, "title", "New Chat")
+        messages = list(conversation.get_all()) if hasattr(conversation, "get_all") else list(conversation)
+        
+        self._enqueue_write(
+            self._save_session_internal,
+            session_id, title, messages, tutor_context
+        )
+
+    def _save_session_internal(self, session_id: str, title: str, messages: list[dict], tutor_context: Any = None) -> None:
+        """Synchronously persist the conversation to SQLite."""
         with self._lock:
             conn = self.conn
             now = datetime.now().isoformat()
-            messages = conversation.get_all() if hasattr(conversation, "get_all") else list(conversation)
             n_msgs = len(messages)
             first_preview = messages[0]["content"][:80] if messages else ""
 
@@ -330,6 +367,7 @@ class SessionStore:
     def load_tutor_context(self, session_id: str) -> Any:
         """Load tutor context for a session."""
         session_id = validate_session_id(session_id)
+        self.flush()
         with self._lock:
             conn = self.conn
             row = conn.execute(
@@ -375,6 +413,7 @@ class SessionStore:
             List of message dicts {role, content, agent_name, timestamp}
         """
         session_id = validate_session_id(session_id)
+        self.flush()
         with self._lock:
             conn = self.conn
             cursor = conn.execute(
@@ -398,6 +437,7 @@ class SessionStore:
         Returns:
             List of {id, profile_id, title, created_at, updated_at, message_count, preview}
         """
+        self.flush()
         with self._lock:
             conn = self.conn
             if profile_id is not None:
@@ -427,6 +467,9 @@ class SessionStore:
     def delete_session(self, session_id: str) -> None:
         """Delete a session, its messages, and its tutor context."""
         session_id = validate_session_id(session_id)
+        self._enqueue_write(self._delete_session_internal, session_id)
+        
+    def _delete_session_internal(self, session_id: str) -> None:
         with self._lock:
             conn = self.conn
             conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))

@@ -39,6 +39,7 @@ class TestCycleDetectionAndGraphResilience:
         conn.execute("INSERT INTO ldg_prerequisites (concept_id, prereq_id) VALUES ('concept_a', 'concept_c')")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         # Calling get_learning_path for concept_c should not hang, recurse infinitely, or drop nodes
         path = ldg.get_learning_path("concept_c")
@@ -61,6 +62,7 @@ class TestCycleDetectionAndGraphResilience:
         conn.execute("INSERT INTO ldg_prerequisites (concept_id, prereq_id) VALUES ('node_y', 'node_x')")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         path = ldg.get_learning_path("node_y")
         path_ids = [c.id for c in path]
@@ -82,6 +84,7 @@ class TestMissingPrerequisitesDeadlockPrevention:
         conn.execute("INSERT INTO ldg_prerequisites (concept_id, prereq_id) VALUES ('concept_live', 'ghost_prereq')")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         # Even though 'ghost_prereq' does not exist, concept_live must be unlocked (not deadlocked)
         assert ldg.is_unlocked("concept_live") is True
@@ -96,6 +99,7 @@ class TestMissingPrerequisitesDeadlockPrevention:
         conn.execute("INSERT INTO ldg_prerequisites (concept_id, prereq_id) VALUES ('target_node', 'nonexistent_node')")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         path = ldg.get_learning_path("target_node")
         assert len(path) == 1
@@ -112,6 +116,7 @@ class TestMissingPrerequisitesDeadlockPrevention:
         conn.execute("INSERT INTO ldg_prerequisites (concept_id, prereq_id) VALUES ('ghost_2', 'valid_node')")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         pruned = ldg.prune_orphaned_prerequisites()
         assert pruned == 2
@@ -142,6 +147,7 @@ class TestMasteryDistinctionAndSubjectStats:
         conn.execute("UPDATE ldg_concepts SET mastery = 0.0 WHERE id = 'tracked_concept'")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         mastery = ldg.get_mastery("tracked_concept")
         assert mastery is not None
@@ -174,6 +180,7 @@ class TestMasteryDistinctionAndSubjectStats:
         conn.execute("UPDATE ldg_concepts SET mastery = 0.1 WHERE id = 'root_locked'")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         ldg.add_prerequisite("child_locked", "root_locked")
 
@@ -231,6 +238,7 @@ class TestConfidenceWeightingAndOscillationDampening:
         conn.execute("UPDATE ldg_concepts SET mastery = 0.3 WHERE id = 'concept_osc'")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         delta_dampened = ldg.record_attempt("concept_osc", correct=True, confidence=1.0) - 0.3
         assert delta_dampened < delta_fresh
@@ -340,6 +348,7 @@ class TestTransactionalTurnRollback:
         conn.execute("UPDATE ldg_concepts SET mastery = 0.5 WHERE id = 'concept_tx'")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         tutor = TutorEngine(ldg)
         session_id = "tx_session"
@@ -384,6 +393,7 @@ class TestTransactionalTurnRollback:
         conn.execute("UPDATE ldg_concepts SET mastery = 0.5 WHERE id = 'concept_success'")
         conn.commit()
         conn.close()
+        ldg.clear_cache()
 
         tutor = TutorEngine(ldg)
         session_id = "success_session"

@@ -25,7 +25,7 @@ def test_agent_runtime_returns_structured_model_unavailable_response(monkeypatch
     def failing_chat(*args, **kwargs):
         raise RuntimeError("No GPU or CPU backend available")
 
-    monkeypatch.setattr("core.providers.local.LocalProvider.chat", failing_chat)
+    monkeypatch.setattr("core.providers.local.LocalProvider.chat_stream", failing_chat)
 
     runtime = AgentRuntime()
     spec = agent_registry.get("Tutor")
@@ -42,7 +42,7 @@ def test_orchestrator_handles_agent_model_unavailable_without_contaminating_conv
     def failing_chat(*args, **kwargs):
         raise FileNotFoundError("Model file missing")
 
-    monkeypatch.setattr("core.providers.local.LocalProvider.chat", failing_chat)
+    monkeypatch.setattr("core.providers.local.LocalProvider.chat_stream", failing_chat)
 
     orch = Orchestrator()
     session_id = "sess_unavail_submit"

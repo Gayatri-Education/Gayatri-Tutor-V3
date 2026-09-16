@@ -254,6 +254,7 @@ class AgentResponse:
     tool_calls: list[dict] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
     status: str = "SUCCESS"  # SUCCESS | MODEL_UNAVAILABLE | ERROR
+    text_stream: Any = None  # Iterator[str] yielding tokens
 
 @dataclass
 class IntentMatch:

@@ -624,14 +624,20 @@ class Orchestrator:
                 if tutor_eng and hasattr(tutor_eng, "begin_transaction"):
                     tutor_txn = tutor_eng.begin_transaction(session_id)
 
-                _evaluate_tutor_response(
-                    session_id, user_message,
-                    tutor=tutor_eng, ldg=self.get_ldg()
-                )
+                # First inject context so the current turn has the previous turn's eval state
                 _inject_tutor_context(
                     context, session_id,
                     tutor=tutor_eng, ldg=self.get_ldg()
                 )
+                
+                # Then evaluate current answer asynchronously so it doesn't block TTFT
+                import threading
+                def _run_eval():
+                    _evaluate_tutor_response(
+                        session_id, user_message,
+                        tutor=tutor_eng, ldg=self.get_ldg()
+                    )
+                threading.Thread(target=_run_eval, daemon=True, name="Gayatri-Evaluator").start()
 
             try:
                 response = self.runtime.process(user_message, context, spec=spec)
@@ -663,9 +669,20 @@ class Orchestrator:
                 _post_tutor_response(session_id, tutor=self.get_tutor_engine())
                 if tutor_txn:
                     tutor_txn.commit()
+                    
             conv.add("user", user_message, agent_name=spec.name)
+            
+            if response.text_stream:
+                buffer = []
+                for token in response.text_stream:
+                    buffer.append(token)
+                    yield token, False
+                resp_text = "".join(buffer)
+            else:
+                yield resp_text, False
+                
             conv.add("assistant", resp_text, agent_name=spec.name)
-            yield resp_text, True
+            yield "", True
             return
 
         # No agent — stream from resolved model

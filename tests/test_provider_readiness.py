@@ -161,7 +161,7 @@ class TestOrchestratorTurnOptionsRouting:
     """Audit #24 & #25: Observable behavior for task_type, model_override, and forced_tier."""
 
     def test_turn_options_task_type_direct_agent_dispatch(self, monkeypatch):
-        monkeypatch.setattr("core.providers.local.LocalProvider.chat", lambda *args, **kwargs: "Mock answer")
+        monkeypatch.setattr("core.providers.local.LocalProvider.chat_stream", lambda *args, **kwargs: iter(["Mock answer"]))
         orch = Orchestrator()
         # Submit a generic message with task_type="tutor"
         # Normally "tell me something" wouldn't match Tutor triggers

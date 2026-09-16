@@ -15,6 +15,7 @@ def test_evaluate_tutor_response_mastery_update(monkeypatch, tmp_path):
     conn.execute("INSERT OR REPLACE INTO ldg_concepts (id, name, subject) VALUES ('test_concept', 'Test Concept', 'test_subject')")
     conn.commit()
     conn.close()
+    ldg.clear_cache()
 
     tutor = TutorEngine(ldg)
     monkeypatch.setattr("core.orchestrator._get_tutor_engine", lambda: tutor)

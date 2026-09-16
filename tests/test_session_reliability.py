@@ -94,6 +94,8 @@ class TestIncrementalSessionSave:
         store.save_session("sess_inc", conv)
 
         # Inspect raw SQLite IDs for first 2 messages
+        conn = store.flush()
+        store.flush()
         conn = store.conn
         rows_1 = conn.execute("SELECT id, role, content FROM messages WHERE session_id = 'sess_inc' ORDER BY id").fetchall()
         assert len(rows_1) == 2
@@ -112,6 +114,7 @@ class TestIncrementalSessionSave:
         store.save_session("sess_inc", conv)
 
         # Verify that original messages kept their exact IDs (0 DELETE executed)
+        store.flush()
         rows_2 = conn.execute("SELECT id, role, content FROM messages WHERE session_id = 'sess_inc' ORDER BY id").fetchall()
         assert len(rows_2) == 4
         assert rows_2[0]["id"] == id_1
@@ -291,15 +294,20 @@ class TestOrchestratorAndBridgeSessionSync:
         assert del_res["ok"] is True
         assert len(store.load_session("valid_sess")) == 0
 
-    def test_bridge_send_message_emits_agent_token_and_done(self, monkeypatch):
-        """Verify token is emitted even when is_done is True alongside token (agent turn)."""
-        from app.bridge import Bridge
+    def test_bridge_send_message_emits_agent_token_and_done(self, qapp):
+        """Bridge must emit tokens and done asynchronously (Audit #52)."""
+        from app.bridge.facade import Bridge
         import unittest.mock as mock
 
         bridge = Bridge()
         mock_orch = mock.MagicMock()
-        # Simulate agent yielding token and is_done=True together
         mock_orch.stream.return_value = iter([("Agent full answer", True)])
+        
+        class MockConv:
+            title = "Mock"
+            def get_all(self): return []
+        mock_orch.get_conversation.return_value = MockConv()
+        
         bridge._orchestrator = mock_orch
 
         tokens = []

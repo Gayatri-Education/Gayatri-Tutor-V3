@@ -25,6 +25,15 @@ def _local_chat(messages: list[dict], max_tokens: int = 300) -> str:
         logger.warning(f"Local model unavailable: {exc}")
         raise ModelUnavailableError(f"Local model unavailable: {exc}") from exc
 
+def _local_chat_stream(messages: list[dict], max_tokens: int = 300):
+    """Stream response from the local model."""
+    try:
+        from core.providers.local import LocalProvider
+        return LocalProvider.chat_stream(messages, max_tokens=max_tokens)
+    except Exception as exc:
+        logger.warning(f"Local model unavailable: {exc}")
+        raise ModelUnavailableError(f"Local model unavailable: {exc}") from exc
+
 
 def _build_messages(system: str, user_message: str,
                     history: list[dict] | None = None) -> list[dict]:
@@ -134,8 +143,8 @@ def register_default_agents() -> None:
                 context.user_message,
                 getattr(context, 'history', None),
             )
-            text = _local_chat(msgs, max_tokens=400)
-            return AgentResponse(text=text, agent_name="Tutor")
+            stream = _local_chat_stream(msgs, max_tokens=400)
+            return AgentResponse(text='', text_stream=stream, agent_name="Tutor")
 
     @agent_registry.register(
         name="Practice Generator",
@@ -157,8 +166,8 @@ def register_default_agents() -> None:
                 context.user_message,
                 getattr(context, 'history', None),
             )
-            text = _local_chat(msgs, max_tokens=400)
-            return AgentResponse(text=text, agent_name="Practice Generator")
+            stream = _local_chat_stream(msgs, max_tokens=400)
+            return AgentResponse(text='', text_stream=stream, agent_name="Practice Generator")
 
     @agent_registry.register(
         name="Code Reviewer",
@@ -181,8 +190,8 @@ def register_default_agents() -> None:
                 context.user_message,
                 getattr(context, 'history', None),
             )
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Code Reviewer")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Code Reviewer")
 
     @agent_registry.register(
         name="Dispatcher",
