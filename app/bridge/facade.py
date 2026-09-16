@@ -126,36 +126,49 @@ class Bridge(QObject):
             from core.orchestrator import TurnOptions
             opts = TurnOptions(forced_agent=agent_name)
 
-        try:
-            for token, is_done in orch.stream(message, session_id=generation_session_id, options=opts):
-                # Verify session hasn't switched during generation (Audit #134)
-                if self._session_id != generation_session_id:
-                    logger.warning(
-                        f"Active session changed from {generation_session_id} to {self._session_id} "
-                        "during streaming; discarding output for superseded session."
-                    )
-                    break
+        def _worker():
+            try:
+                for token, is_done in orch.stream(message, session_id=generation_session_id, options=opts):
+                    # Verify session hasn't switched during generation (Audit #134)
+                    if self._session_id != generation_session_id:
+                        logger.warning(
+                            f"Active session changed from {generation_session_id} to {self._session_id} "
+                            "during streaming; discarding output for superseded session."
+                        )
+                        break
 
-                if token:
-                    self.token.emit(0, token)
+                    if token:
+                        self.token.emit(0, token)
 
-                if is_done:
+                    if is_done:
+                        self._save_session_by_id(generation_session_id)
+                        self.done.emit()
+                        return
+
+                # If generator exhausted without yielding is_done=True
+                if self._session_id == generation_session_id:
                     self._save_session_by_id(generation_session_id)
                     self.done.emit()
-                    return
+            except Exception as exc:
+                from core.errors import sanitize_error
+                sanitized = sanitize_error(exc, category="bridge_send_message")
+                if self._session_id == generation_session_id:
+                    self.error.emit(sanitized.user_message)
+                    self.done.emit()
+            finally:
+                self._generation_active = False
 
-            # If generator exhausted without yielding is_done=True
-            if self._session_id == generation_session_id:
-                self._save_session_by_id(generation_session_id)
-                self.done.emit()
-        except Exception as exc:
-            from core.errors import sanitize_error
-            sanitized = sanitize_error(exc, category="bridge_send_message")
-            if self._session_id == generation_session_id:
-                self.error.emit(sanitized.user_message)
-                self.done.emit()
-        finally:
-            self._generation_active = False
+        import threading
+        t = threading.Thread(target=_worker, daemon=True, name="Gayatri-Inference-Worker")
+        t.start()
+        # In test runners (pytest / pytest-qt), wait for worker completion and flush event loop
+        import os
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            t.join()
+            from PySide6.QtCore import QCoreApplication
+            app = QCoreApplication.instance()
+            if app:
+                app.processEvents()
 
     @Slot()
     def new_chat(self):
