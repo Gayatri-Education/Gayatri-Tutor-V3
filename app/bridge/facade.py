@@ -180,6 +180,16 @@ class Bridge(QObject):
                 app.processEvents()
 
     @Slot()
+    def cancel_generation(self):
+        """Cancel the current LLM generation."""
+        if self._generation_active:
+            from core.providers.local import LocalProvider
+            LocalProvider.cancel()
+            logger.info("Cancellation signal sent to generation worker.")
+        else:
+            logger.debug("Cancellation requested but no generation is active.")
+
+    @Slot()
     def new_chat(self):
         """Start a new conversation."""
         if self._generation_active:

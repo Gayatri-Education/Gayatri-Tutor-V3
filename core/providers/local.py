@@ -77,7 +77,14 @@ class LocalProvider:
     _model = None
     _model_lock = threading.Lock()
     _infer_lock = threading.Lock()
+    _cancel_flag = False
     MODEL_PATH = LOCAL_MODEL_DIR / LOCAL_MODEL_FILE
+
+    @classmethod
+    def cancel(cls) -> None:
+        """Flag the current generation to stop early."""
+        logger.info("Cancellation requested for local model generation.")
+        cls._cancel_flag = True
 
     @classmethod
     def _load_model(cls, **override_params):
@@ -266,6 +273,7 @@ class LocalProvider:
         def _generator():
             try:
                 with cls._infer_lock:
+                    cls._cancel_flag = False
                     stream_obj = model.create_completion(
                         prompt=prompt,
                         max_tokens=max_tokens,
@@ -276,9 +284,14 @@ class LocalProvider:
                         stream=True,
                     )
                     for chunk in stream_obj:
+                        if cls._cancel_flag:
+                            logger.info("Local model generation cancelled by user.")
+                            break
+                        
                         text = chunk["choices"][0].get("text", "")
                         if text:
                             yield text
+                    cls._cancel_flag = False
             except Exception as exc:
                 logger.error(f"Generation failed: {exc}")
                 raise LocalModelError(f"Generation failed: {exc}") from exc

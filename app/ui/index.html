@@ -546,6 +546,7 @@
           <input type="text" id="userInput" placeholder="Type a message or question..."
                  autocomplete="off" onkeydown="if(event.key==='Enter')send()">
           <button class="send-btn" id="sendBtn" onclick="send()">Send</button>
+          <button class="send-btn" id="stopBtn" onclick="cancelGeneration()" style="display: none; background: #666;">Stop</button>
         </div>
       </div>
 
@@ -1125,9 +1126,23 @@
     }
 
     function updateSendButton() {
-      var btn = document.getElementById('sendBtn');
-      btn.disabled = isGenerating;
-      btn.textContent = isGenerating ? '...' : 'Send';
+      var sendBtn = document.getElementById('sendBtn');
+      var stopBtn = document.getElementById('stopBtn');
+      if (isGenerating) {
+          sendBtn.style.display = 'none';
+          stopBtn.style.display = 'inline-block';
+      } else {
+          sendBtn.style.display = 'inline-block';
+          stopBtn.style.display = 'none';
+      }
+    }
+    
+    function cancelGeneration() {
+      if (!isGenerating || !bridge) return;
+      if (typeof bridge.cancel_generation === 'function') {
+        bridge.cancel_generation();
+        // Don't set isGenerating = false immediately, let the bridge.error/done signal handle it safely
+      }
     }
 
     // ── Window Controls (Frameless UI) ──
