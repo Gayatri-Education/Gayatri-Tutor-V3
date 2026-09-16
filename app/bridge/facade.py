@@ -319,8 +319,10 @@ class Bridge(QObject):
             value = store.get(key)
             return json.dumps(value)
         except Exception as exc:
-            logger.error(f"get_setting failed: {exc}")
-            return json.dumps(None)
+            logger.error(f"get_setting('{key}') failed: {exc}", exc_info=True)
+            # Return sensible defaults for known settings so UI doesn't break
+            defaults = {"privacy_mode": "local_only", "theme": "dark"}
+            return json.dumps(defaults.get(key))
 
     @Slot(result=str)
     def get_local_model_status(self) -> str:

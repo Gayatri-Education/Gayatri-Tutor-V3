@@ -354,7 +354,7 @@ class SessionStore:
                 try:
                     last_interaction = datetime.fromisoformat(row["updated_at"]).timestamp()
                 except Exception:
-                    pass
+                    logger.debug("Failed to parse updated_at timestamp, defaulting to 0.0", exc_info=True)
 
             return TutorContext(
                 current_concept_id=row["current_concept_id"] or "",

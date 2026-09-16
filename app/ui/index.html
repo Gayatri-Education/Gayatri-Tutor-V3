@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' qrc:; script-src 'self' 'unsafe-inline' qrc:; style-src 'self' 'unsafe-inline'; img-src 'self' data: qrc:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self' qrc: http://localhost:* http://127.0.0.1:*;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' qrc:; script-src 'self' 'unsafe-inline' qrc:; style-src 'self' 'unsafe-inline'; img-src 'self' data: qrc:; object-src 'none'; base-uri 'none'; connect-src 'self' qrc: http://localhost:* http://127.0.0.1:*;">
   <title>Gayatri AI</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -946,7 +946,7 @@
       }
     }
 
-    function validateKey(providerKey) {
+    async function validateKey(providerKey) {
       var input = document.getElementById('key-' + providerKey);
       var keyVal = input ? input.value.trim() : '';
       if (!keyVal) {
@@ -1007,7 +1007,7 @@
           text.textContent = 'Model not found';
           if (detail) detail.textContent = 'Model file not installed: ' + (status.message || 'Needs download');
         }
-      } catch(e) {}
+      } catch(e) { console.error('Model status check failed:', e); }
     }
 
     // ── Chat functions ──

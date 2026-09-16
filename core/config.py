@@ -61,7 +61,7 @@ LOCAL_MODEL_GPU_LAYERS: int = -1  # -1 = all layers on GPU if available
 
 # Model download source (HuggingFace bartowski GGUF — used by download_model in bridge)
 MODEL_HUGGINGFACE_REPO: str = "bartowski/gemma-2-2b-it-GGUF"
-MODEL_GGUF_FILENAME: str = "gemma-2-2b-it-Q4_K_M.gguf"
+MODEL_GGUF_FILENAME: str = "gemma-2-2b-it-IQ3_M.gguf"
 
 # Inference defaults
 DEFAULT_TEMPERATURE: float = 0.7

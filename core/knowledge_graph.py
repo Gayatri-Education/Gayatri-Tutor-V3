@@ -163,7 +163,7 @@ class LearningDependencyGraph:
             if "assessment_types" in row.keys() and row["assessment_types"]:
                 assess_types = json.loads(row["assessment_types"])
         except Exception:
-            pass
+            logger.debug("Failed to parse assessment_types JSON, defaulting to []", exc_info=True)
 
         return Concept(
             id=row["id"],
@@ -633,6 +633,6 @@ def get_ldg(db_path: str | Path | None = None) -> LearningDependencyGraph:
         if ldg is not None and db_path is None:
             return ldg
     except Exception:
-        pass
+        logger.debug("Could not reuse existing LDG, creating new instance", exc_info=True)
     return LearningDependencyGraph(db_path=db_path)
 

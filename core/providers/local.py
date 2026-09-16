@@ -203,7 +203,7 @@ class LocalProvider:
                         "path": str(model_path)
                     }
         except Exception:
-            pass
+            logger.debug("Model metadata check skipped (non-critical)", exc_info=True)
 
         try:
             import llama_cpp  # noqa: F401
