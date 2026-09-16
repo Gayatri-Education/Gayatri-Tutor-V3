@@ -1,6 +1,4 @@
-import pytest
-import json
-from core.tutor_engine import TutorEngine, get_tutor_engine
+from core.tutor_engine import TutorEngine
 from core.knowledge_graph import LearningDependencyGraph
 from core.orchestrator import _evaluate_tutor_response
 

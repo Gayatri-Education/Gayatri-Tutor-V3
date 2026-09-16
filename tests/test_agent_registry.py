@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
 
-from core.agents.registry import AgentRegistry, agent_registry
+from core.agents.registry import AgentRegistry, AgentResponse, agent_registry
 
 
 class TestAgentRegistry:
