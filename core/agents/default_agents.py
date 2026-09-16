@@ -36,14 +36,25 @@ def _local_chat_stream(messages: list[dict], max_tokens: int = 300):
 
 
 def _build_messages(system: str, user_message: str,
-                    history: list[dict] | None = None) -> list[dict]:
-    """Build a message list with system prompt, optional history, and current user message."""
+                    history: list[dict] | None = None,
+                    dynamic_context: str = "") -> list[dict]:
+    """Build a message list.
+    
+    IMPORTANT for Performance (Phase 5): The system prompt and history must remain
+    STATIC prefixes to maximize llama.cpp KV Cache reuse. Dynamic state (like mastery
+    levels) MUST be injected into the final user message, NOT the system prompt.
+    """
     messages = [{"role": "system", "content": system}]
     if history:
         for msg in history:
             if msg.get("role") in ("user", "assistant"):
                 messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": user_message})
+    
+    final_user_content = user_message
+    if dynamic_context:
+        final_user_content = f"[{dynamic_context}]\n\nUser: {user_message}"
+        
+    messages.append({"role": "user", "content": final_user_content})
     return messages
 
 
@@ -84,30 +95,22 @@ def _get_tutor_context(context) -> str:
     return "\n".join(parts)
 
 
-def _build_tutor_system_prompt(context) -> str:
-    """Build a system prompt for the Tutor agent with LDG context."""
-    base = (
+def _build_tutor_system_prompt() -> str:
+    """Build a STATIC system prompt for the Tutor agent."""
+    return (
         "You are a patient Socratic tutor. Guide the student to answers through questions. "
         "Never give direct answers. Adapt explanations to their level. Use simple examples. "
         "Reference earlier parts of the conversation if relevant."
     )
-    tutor_context = _get_tutor_context(context)
-    if tutor_context:
-        base += f"\n\nTeaching context:\n{tutor_context}"
-    return base
 
 
-def _build_practice_system_prompt(context) -> str:
-    """Build a system prompt for the Practice Generator with LDG context."""
-    base = (
+def _build_practice_system_prompt() -> str:
+    """Build a STATIC system prompt for the Practice Generator."""
+    return (
         "Generate one practice problem based on the user's current learning concept. "
         "State the question clearly. Wait for the student's answer before "
         "giving the solution. Make it appropriate to their mastery level."
     )
-    tutor_context = _get_tutor_context(context)
-    if tutor_context:
-        base += f"\n\nTeaching context:\n{tutor_context}"
-    return base
 
 
 def register_default_agents() -> None:
@@ -137,11 +140,13 @@ def register_default_agents() -> None:
     )
     class TutorAgent:
         def process(self, context) -> AgentResponse:
-            system = _build_tutor_system_prompt(context)
+            system = _build_tutor_system_prompt()
+            dynamic_ctx = _get_tutor_context(context)
             msgs = _build_messages(
                 system,
                 context.user_message,
                 getattr(context, 'history', None),
+                dynamic_context=dynamic_ctx
             )
             stream = _local_chat_stream(msgs, max_tokens=400)
             return AgentResponse(text='', text_stream=stream, agent_name="Tutor")
@@ -156,15 +161,17 @@ def register_default_agents() -> None:
             "practice problems",
             "homework",
         ],
-        description="Generates practice problems and exercises",
+        description="Generate practice exercises.",
     )
-    class PracticeAgent:
+    class PracticeGenerator:
         def process(self, context) -> AgentResponse:
-            system = _build_practice_system_prompt(context)
+            system = _build_practice_system_prompt()
+            dynamic_ctx = _get_tutor_context(context)
             msgs = _build_messages(
                 system,
                 context.user_message,
                 getattr(context, 'history', None),
+                dynamic_context=dynamic_ctx
             )
             stream = _local_chat_stream(msgs, max_tokens=400)
             return AgentResponse(text='', text_stream=stream, agent_name="Practice Generator")

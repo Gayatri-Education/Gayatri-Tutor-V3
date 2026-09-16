@@ -449,7 +449,7 @@ class Orchestrator:
                 user_message=user_message,
                 model_tier=opts.forced_tier or "local",
                 model_override=opts.model_override,
-                history=conv.get_messages_for_model()[-10:],
+                history=conv.get_messages_for_model()[-50:],
             )
 
             # Inject LDG context for Tutor agent (transactional, Audit #128)
@@ -615,7 +615,7 @@ class Orchestrator:
                 user_message=user_message,
                 model_tier=opts.forced_tier or "local",
                 model_override=opts.model_override,
-                history=conv.get_messages_for_model()[-10:],
+                history=conv.get_messages_for_model()[-50:],
             )
 
             tutor_txn = None

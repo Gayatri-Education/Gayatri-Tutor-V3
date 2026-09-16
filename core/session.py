@@ -147,6 +147,13 @@ class SessionStore:
             conn.commit()
         except sqlite3.OperationalError:
             pass  # Already present
+            
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN summary TEXT DEFAULT '';")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Already present
+            
         logger.info(f"Session DB ready: {self.db_path}")
 
     def save_session(self, session_id: str, conversation: Any, tutor_context: Any = None) -> None:
