@@ -13,3 +13,4 @@ settings.json
 GayatriAI/
 ignored_assets/
 dist/
+venv/
