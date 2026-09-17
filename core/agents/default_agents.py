@@ -102,13 +102,20 @@ def _build_practice_system_prompt(context) -> str:
 
 
 def register_default_agents() -> None:
-    """Idempotently register the four default agents plus all prompt-engineered agents."""
+    """Idempotently register the four default agents plus all prompt and K-12 agents."""
     # Register prompt-engineered agents first (idempotent)
     try:
         from core.agents.prompt_agents import register_prompt_agents as _reg_prompts
         _reg_prompts()
     except Exception as exc:
         logger.warning(f"Failed to register prompt agents: {exc}")
+
+    # Register K-12 specialized agents (idempotent)
+    try:
+        from core.agents.k12_agents import register_k12_agents as _reg_k12
+        _reg_k12()
+    except Exception as exc:
+        logger.warning(f"Failed to register K-12 agents: {exc}")
 
     # Now register the four default agents (also idempotent)
     if agent_registry.get("Tutor") is not None:
