@@ -4,6 +4,35 @@ All notable changes to the Gayatri Tutor V3 project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-09-17
+
+### Added
+- **K-12 Specialized Agent Ecosystem:**
+  - Expanded registered agents to 54 total with 21 new K-12 agents (`core/agents/k12_agents.py`):
+    - **STEM:** Elementary Math Tutor, Algebra Tutor, Geometry Tutor, Physics Tutor, Chemistry Tutor, Biology Tutor, Environmental Science Tutor.
+    - **Humanities & Language:** History & Civics Tutor, Geography Tutor, English Grammar Coach, Reading Comprehension Coach, Creative Writing Mentor.
+    - **Grade-Band Personas:** Primary School Coach (Grades 1–5), Middle School Mentor (Grades 6–8), High School & Exam Coach (Grades 9–12).
+    - **Pedagogy & Study:** Socratic Questioner, Progressive Hint Giver, Doubt Buster, Formula & Theorem Companion, Quiz Master, Study Habit Coach.
+- **Course-as-Markdown Ingestion Engine (`core/tutor/course_loader.py`):**
+  - Zero-dependency built-in parser with optional PyYAML fallback.
+  - Ingests YAML frontmatter, `# Heading {#topic-id}` anchors, inline `level:N` paragraphs, and ```` ```quiz ```` code blocks.
+- **Pilot Curricula Content:**
+  - Grade 5 Mathematics (`content/courses/math_g5_fractions.md`) with 3 topics and 8 embedded quiz questions.
+  - Grade 8 Science (`content/courses/science_g8_cell.md`) with 3 topics and 7 embedded quiz questions.
+- **Additive Persistence Layer (`core/tutor/course_repo.py`):**
+  - Thread-safe SQLite tables: `k12_courses`, `k12_topics`, `k12_questions`, `k12_diagnostic_attempts`, `k12_topic_mastery`, and `k12_progress_events`.
+- **Diagnostic Placement Testing (`core/tutor/student_diagnostic.py`):**
+  - Balanced 5–8 placement question selection across difficulty levels 1–5.
+  - Weighted baseline mastery calculation ($M_0 = \sum (correct \times diff) / \sum diff$) with pedagogical tier classification.
+- **Bayesian Knowledge Tracing (BKT) Mastery Engine (`core/tutor/mastery_engine.py`):**
+  - Continuous difficulty-weighted mastery updates clamped to $[0.0, 1.0]$.
+  - 3-tier dynamic scaffolding context builder (`Remedial`, `Core`, `Advanced`).
+- **Comprehensive Automated Tests (`tests/test_k12_adaptive_tutor.py`):**
+  - 6 dedicated behavioral tests verifying agent registration, parsing, repository CRUD, diagnostic assessment, and BKT math.
+
+### Verified
+- 100% test pass rate across 243 automated tests (237 regression + 6 new K-12 tests).
+
 ## [3.0.0] - 2026-09-16
 
 ### Added

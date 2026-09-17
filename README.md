@@ -21,12 +21,20 @@ This project was built from the ground up to demonstrate how specialized AI agen
 
 ## 🌟 What This Project Does
 
-- **Intelligent Orchestration:** A central local LLM routes user requests to specialized AI agents (e.g., Code Reviewer, Math Tutor, General Assistant) based on context and need.
-- **Privacy Controlled by Design:** The app supports precise data boundary control:
-  - **Local-Only Mode (Default):** All primary inference happens entirely on your local machine using quantized GGUF models. Conversation content stays on-device except for explicitly invoked local dependencies.
+- **54 Specialized AI Agents:** An ecosystem of agents orchestrated locally:
+  - **K-12 STEM Specialists:** Elementary Math, Algebra, Geometry, Physics, Chemistry, Biology, Environmental Science.
+  - **Humanities & Language:** History & Civics, Geography, English Grammar Coach, Reading Comprehension, Creative Writing.
+  - **Grade-Band Coaches:** Primary School (Grades 1–5), Middle School (Grades 6–8), High School & Board Exam Coach (Grades 9–12).
+  - **Pedagogical Support:** Socratic Questioner, Progressive Hint Giver, Doubt Buster, Formula & Theorem Companion, Quiz Master, Study Habit Coach.
+  - **Enterprise & Productivity Agents:** Orchestrator, Research, Translation, Document, Summarization, and more.
+- **Adaptive K-12 Learning Engine (BKT):**
+  - **Course-as-Markdown Ingestion:** Authors create curricula in standard `.md` files with YAML frontmatter, anchored topics `{#topic-id}`, `level:N` paragraphs, and embedded machine-parseable ```` ```quiz ```` blocks.
+  - **Diagnostic Placement Testing:** Automated 5–8 question placement test measuring baseline ability across difficulty levels 1–5.
+  - **Bayesian Knowledge Tracing (BKT):** Continuous difficulty-weighted mastery updates ($M \in [0.0, 1.0]$) dynamically driving 3-tier pedagogical scaffolding (`Remedial`, `Core`, `Advanced`).
+- **Privacy Controlled by Design:**
+  - **Local-Only Mode (Default):** All primary inference happens entirely on your local machine using quantized GGUF models.
   - **Cloud-Allowed Mode:** User-approved provider calls may transmit submitted content according to the provider's policy.
-- **Interactive Tutoring Engine:** Tracks student mastery over concepts using a Learning Dependency Graph and adapts responses dynamically to foster actual learning rather than just providing answers.
-- **Beautiful & Native Desktop UI:** Built using PySide6 and a modern WebEngine front-end, bridging smooth web technologies with robust Python backend logic.
+- **Native Desktop UI:** Built using PySide6 and a modern WebEngine front-end with SwiftShader software rendering to eliminate GPU artifacts.
 
 ---
 
