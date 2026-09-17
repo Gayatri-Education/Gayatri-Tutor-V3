@@ -12,7 +12,7 @@ This project was built from the ground up to demonstrate how specialized AI agen
 ## ✨ Preview
 
 <p align="center">
-  <img src="docs/assets/screenshot.png" alt="Gayatri Tutor V3 — Chat Interface" width="100%" />
+  <img src="docs/screenshot.png" alt="Gayatri Tutor V3 — Chat Interface" width="100%" />
 </p>
 
 > *Gayatri Tutor V3 running in Local Mode — atmospheric dark UI with the Socratic tutoring engine active.*
