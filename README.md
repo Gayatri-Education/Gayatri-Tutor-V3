@@ -9,6 +9,16 @@ This project was built from the ground up to demonstrate how specialized AI agen
 
 ---
 
+## ✨ Preview
+
+<p align="center">
+  <img src="docs/assets/screenshot.png" alt="Gayatri Tutor V3 — Chat Interface" width="100%" />
+</p>
+
+> *Gayatri Tutor V3 running in Local Mode — atmospheric dark UI with the Socratic tutoring engine active.*
+
+---
+
 ## 🌟 What This Project Does
 
 - **Intelligent Orchestration:** A central local LLM routes user requests to specialized AI agents (e.g., Code Reviewer, Math Tutor, General Assistant) based on context and need.
@@ -71,6 +81,27 @@ The intelligence of Gayatri Tutor is powered by a custom fine-tuned model. The r
 | **Database & Persistence**| SQLite + sqlite-vec |
 | **Security & Secrets** | Windows DPAPI |
 | **Testing & Quality** | `pytest`, `pytest-qt`, `ruff` |
+| **UI Rendering** | SwiftShader (software renderer) — eliminates GPU texture corruption on Windows DWM |
+
+---
+
+## 🖥️ UI & Rendering Stability
+
+Gayatri Tutor V3 runs on a **frameless PySide6 window** with a Chromium WebEngine front-end. On Windows, the Chromium GPU process can promote compositor surfaces to hardware overlays via MPO (Multi-Plane Overlay), which causes severe texture corruption (black checkerboard artifacts) in frameless windows without a native titlebar.
+
+This is fully resolved by forcing **SwiftShader** software rendering via Chromium flags set before any Qt import in `app/main.py`:
+
+```python
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+    "--disable-gpu "
+    "--in-process-gpu "
+    "--disable-features=UseSkiaRenderer "
+    "--disable-gpu-compositing "
+    ...
+)
+```
+
+The result is a pixel-perfect, flicker-free UI at all times — with zero GPU texture corruption on any Windows version.
 
 ---
 
