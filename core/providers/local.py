@@ -272,6 +272,11 @@ class LocalProvider:
 
         def _generator():
             try:
+                import time
+                start_time = time.time()
+                first_token_time = None
+                tokens_emitted = 0
+
                 with cls._infer_lock:
                     cls._cancel_flag = False
                     stream_obj = model.create_completion(
@@ -290,7 +295,20 @@ class LocalProvider:
                         
                         text = chunk["choices"][0].get("text", "")
                         if text:
+                            if first_token_time is None:
+                                first_token_time = time.time()
+                            tokens_emitted += 1
                             yield text
+
+                    duration = time.time() - (first_token_time or start_time)
+                    ttft = ((first_token_time or start_time) - start_time) * 1000
+                    tps = tokens_emitted / duration if duration > 0 else 0
+                    logger.info(
+                        f"TELEMETRY: {{\"ttft_ms\": {ttft:.1f}, "
+                        f"\"generation_ms\": {duration*1000:.1f}, "
+                        f"\"output_tokens\": {tokens_emitted}, "
+                        f"\"tokens_per_second\": {tps:.1f}}}"
+                    )
                     cls._cancel_flag = False
             except Exception as exc:
                 logger.error(f"Generation failed: {exc}")
