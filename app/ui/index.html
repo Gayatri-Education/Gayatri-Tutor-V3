@@ -433,7 +433,6 @@
       justify-content: space-between;
       flex: 0 0 auto;
       gap: 12px;
-    }
     .greeting-title {
       font-size: 23px;
       font-weight: 700;
@@ -442,6 +441,27 @@
       align-items: center;
       gap: 8px;
       letter-spacing: -0.01em;
+    }
+
+    /* Markdown pre/code rendering support */
+    .message-content p, .msg-text-content p {
+      margin-bottom: 8px;
+    }
+    .message-content p:last-child, .msg-text-content p:last-child {
+      margin-bottom: 0;
+    }
+    .message-content pre, .msg-text-content pre {
+      background: #0f0f23;
+      padding: 8px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .message-content code, .msg-text-content code {
+      background: #0f0f23;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: monospace;
     }
     .greeting-subtitle {
       font-size: 12.5px;
@@ -1654,6 +1674,7 @@
   </div>
 
   <script src="qrc:/qtwebchannel/qwebchannel.js"></script>
+  <script src="marked.min.js"></script>
   <script>
     /* ── State & Bridge Setup ─────────────────────────────────────── */
     let bridge = null;
@@ -1662,6 +1683,8 @@
     let allAgents = [];
     let currentCourseConcepts = [];
     let selectedConceptForStudy = null;
+    let markdownDebounceTimer = null;
+    let renderRequested = false;
 
     /* ── Live Clock Tracker ───────────────────────────────────────── */
     function updateLiveClock() {
@@ -1750,14 +1773,21 @@
 
       bridge.token.connect(function(idx, text) {
         currentTokens.push(text);
-        updateStreamView();
+        if (!renderRequested) {
+          renderRequested = true;
+          window.requestAnimationFrame(updateStreamViewRaw);
+        }
+        clearTimeout(markdownDebounceTimer);
+        markdownDebounceTimer = setTimeout(updateStreamView, 50);
       });
 
       bridge.done.connect(function() {
+        clearTimeout(markdownDebounceTimer);
         finishStream();
       });
 
       bridge.error.connect(function(msg) {
+        clearTimeout(markdownDebounceTimer);
         appendMsgRow("system", "Error: " + msg, "System");
         finishStream();
       });
@@ -1876,6 +1906,9 @@
 
     function stopStream() {
       if (!isGenerating) return;
+      if (bridge && typeof bridge.cancel_generation === "function") {
+        bridge.cancel_generation();
+      }
       finishStream();
     }
 
@@ -1899,6 +1932,21 @@
       container.appendChild(row);
       container.scrollTop = container.scrollHeight;
       return row;
+    }
+
+    function updateStreamViewRaw() {
+      renderRequested = false;
+      const container = document.getElementById("chatFeed");
+      if (!container) return;
+      const assistantRows = container.querySelectorAll(".msg-row.assistant");
+      const last = assistantRows[assistantRows.length - 1];
+      if (!last) return;
+
+      const content = last.querySelector(".msg-text-content");
+      if (content) {
+        content.textContent = currentTokens.join("");
+      }
+      container.scrollTop = container.scrollHeight;
     }
 
     function updateStreamView() {
@@ -2619,7 +2667,13 @@
       }
     }
 
-    /* ── Window Controls ──────────────────────────────────────────── */
+    /* ── Compatibility Aliases for Legacy Handlers ────────────────── */
+    function send() { sendPrompt(); }
+    function addMessage(role, text, tag) { return appendMsgRow(role, text, tag); }
+    function cancelGeneration() { stopStream(); }
+    function updateSendButton() { updateComposeControls(); }
+
+    /* ── Window Controls (Frameless UI) ───────────────────────────── */
     function minimizeWindow() {
       if (bridge && typeof bridge.minimize_window === "function") bridge.minimize_window();
     }

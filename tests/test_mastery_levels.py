@@ -29,6 +29,7 @@ def test_record_response_updates_fields(tmp_path):
     conn.execute('INSERT INTO ldg_concepts (id, name, subject) VALUES (?, ?, ?)', ('c1', 'Concept 1', 'python'))
     conn.commit()
     conn.close()
+    ldg.clear_cache()
     
     engine = TutorEngine(ldg)
     ctx = engine.get_or_create_context('session1')
@@ -63,6 +64,7 @@ def test_decay_scheduler_and_review_queue(tmp_path):
                  ('c_next', 'M3', 'python', 0.3, ''))
     conn.commit()
     conn.close()
+    ldg.clear_cache()
     
     engine = TutorEngine(ldg)
     ctx = engine.get_or_create_context('session1')

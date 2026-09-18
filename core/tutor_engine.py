@@ -141,6 +141,8 @@ class TutorTurnTransaction:
                     )
                     conn.commit()
                     conn.close()
+                    if hasattr(self.engine.ldg, "clear_cache"):
+                        self.engine.ldg.clear_cache()
                 except Exception as exc:
                     logger.error(f"Failed to rollback LDG concept in SQLite: {exc}")
 
@@ -367,10 +369,7 @@ class TutorEngine:
                 "progress": stats,
             }
 
-    def clear_session(self, session_id: str) -> None:
-        """Clear tutor context for a specific session."""
-        with self._lock:
-            self.session_contexts.pop(session_id, None)
+
 
 
 # Global tutor engine (lazy-initialized with LDG, protected by lock)
