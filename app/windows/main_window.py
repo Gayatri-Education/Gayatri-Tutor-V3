@@ -32,11 +32,23 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setWindowTitle("Gayatri AI")
+        self.setStyleSheet("background-color: #080b12;")
 
-        # WebEngine view
+        # WebEngine view with dark base background to prevent white/grey flicker
+        from PySide6.QtGui import QColor
+        from PySide6.QtWebEngineCore import QWebEngineSettings
         self._web = QWebEngineView()
+        self._web.setStyleSheet("background-color: #080b12;")
         self._page = SecureWebPage()
+        self._page.setBackgroundColor(QColor("#080b12"))
         self._web.setPage(self._page)
+
+        # Disable all GPU-accelerated rendering paths at the Qt settings level
+        # (belt-and-suspenders alongside the env QTWEBENGINE_CHROMIUM_FLAGS)
+        settings = self._page.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, False)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, False)
+
         self.setCentralWidget(self._web)
 
         # WebChannel + Bridge

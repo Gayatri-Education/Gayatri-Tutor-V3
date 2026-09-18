@@ -4,1168 +4,2685 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' qrc:; script-src 'self' 'unsafe-inline' qrc:; style-src 'self' 'unsafe-inline'; img-src 'self' data: qrc:; object-src 'none'; base-uri 'none'; connect-src 'self' qrc: http://localhost:* http://127.0.0.1:*;">
-  <title>Gayatri AI</title>
+  <title>Gayatri Tutor</title>
   <style>
+    /* ── Atmospheric Ambient Theme Tokens ───────────────────────── */
+    :root {
+      --bg-base: #080b12;
+      --bg-sidebar: #080c14;
+      --bg-surface: #0a0e18;
+      --bg-surface-elevated: #111827;
+      --bg-surface-card: #0d1320;
+      --bg-input: #0b101b;
+      --bg-code: #080b14;
+      
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-card: rgba(255, 255, 255, 0.09);
+      --border-hover: rgba(99, 130, 246, 0.45);
+      --border-focus: #2563eb;
+      
+      --text-main: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-dim: #64748b;
+      
+      --accent-blue: #2563eb;
+      --accent-blue-hover: #1d4ed8;
+      --accent-glow: rgba(37, 99, 235, 0.35);
+      
+      --emerald: #10b981;
+      --emerald-subtle: rgba(16, 185, 129, 0.15);
+      --amber: #f59e0b;
+      --purple: #8b5cf6;
+      --rose: #f43f5e;
+      --cyan: #06b6d4;
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 18px;
+      
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+      
+      --ease-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: #0f0f23;
-      color: #e0e0e0;
-      height: 100vh;
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
       overflow: hidden;
-    }
-    .app {
-      display: flex;
-      height: 100vh;
-    }
-
-    /* ── Sidebar ── */
-    .sidebar {
-      width: 60px;
-      background: #16213e;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 12px 0;
-      flex-shrink: 0;
-    }
-    .sidebar-logo {
-      width: 36px;
-      height: 36px;
-      background: #e94560;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 16px;
-      color: white;
-      margin-bottom: 16px;
+      font-family: var(--font-sans);
+      background: 
+        linear-gradient(rgba(8, 12, 22, 0.40), rgba(8, 12, 22, 0.55)),
+        url('background.jpg') no-repeat center center / cover;
+      background-color: var(--bg-base);
+      color: var(--text-main);
       user-select: none;
+      -webkit-font-smoothing: antialiased;
     }
-    .sidebar-btn {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      border: none;
-      background: transparent;
-      color: #8a8a9a;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 6px;
-      font-size: 18px;
-      transition: all 0.15s;
-    }
-    .sidebar-btn:hover { background: #1a1a3e; color: #e0e0e0; }
-    .sidebar-btn.active { background: #e94560; color: white; }
 
-    /* ── Main area ── */
-    .main {
-      flex: 1;
+    /* Slim custom scrollbars to prevent 17px Windows layout jump/flicker */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.14);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    /* Tactile button micro-interactions */
+    button, .interactive {
+      transition: background-color 90ms ease, color 90ms ease, border-color 90ms ease;
+      font-family: inherit;
+    }
+    button:active, .interactive:active {
+      opacity: 0.88;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        transition-duration: 0.001ms !important;
+        transform: none !important;
+      }
+    }
+
+    /* ── App Shell ───────────────────────────────────────────────── */
+    .app-window {
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw;
+      max-height: 100vh;
       display: flex;
       flex-direction: column;
-      min-width: 0;
+      overflow: hidden;
       position: relative;
+      background: transparent;
+      z-index: 1;
     }
 
-    /* ── Titlebar ── */
+    /* ── Frameless Titlebar ───────────────────────────────────────── */
     .titlebar {
-      height: 36px;
-      background: #16213e;
+      height: 44px;
+      flex: 0 0 44px;
+      width: 100%;
+      background: #080c14;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 12px;
+      padding: 0 16px;
       -webkit-app-region: drag;
-      flex-shrink: 0;
-      border-bottom: 1px solid #1f2847;
+      z-index: 100;
     }
-    .titlebar-text { font-size: 12px; color: #8a8a9a; font-weight: 500; }
-    .titlebar-controls { display: flex; gap: 8px; -webkit-app-region: no-drag; }
-    .titlebar-btn {
-      width: 14px; height: 14px; border-radius: 50%; border: none; cursor: pointer;
-      transition: opacity 0.15s;
-    }
-    .titlebar-btn:hover { opacity: 0.8; }
-    .btn-minimize { background: #f5c542; }
-    .btn-maximize { background: #27c93f; }
-    .btn-close { background: #e94560; }
-
-    /* ── Tab Views ── */
-    .tab-view {
-      display: none;
-      flex: 1;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .tab-view.active {
-      display: flex;
-    }
-    .tab-scrollable {
-      flex: 1;
-      overflow-y: auto;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    /* ── Agent bar (Chat Tab) ── */
-    .agent-bar {
+    .titlebar-brand {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      background: #1a1a3e;
-      border-bottom: 1px solid #2a2a4a;
-      flex-shrink: 0;
+      gap: 10px;
     }
-    .agent-label { font-size: 11px; color: #8a8a9a; }
-    .agent-select {
-      background: #16213e;
-      color: #e0e0e0;
-      border: 1px solid #333;
-      border-radius: 6px;
-      padding: 4px 8px;
+    .brand-icon {
+      width: 20px;
+      height: 20px;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand-name {
+      font-size: 13.5px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #fff;
+    }
+    .brand-tag {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+      margin-left: 2px;
+    }
+    
+    .titlebar-center {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+    
+    .titlebar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      -webkit-app-region: no-drag;
+    }
+    .pill-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 9999px;
+    }
+    .pill-status.warning {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .btn-new-session {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 10px var(--accent-glow);
+    }
+    .btn-new-session:hover {
+      background: var(--accent-blue-hover);
+    }
+
+    .window-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 6px;
+    }
+    .win-btn {
+      width: 26px;
+      height: 24px;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+    }
+    .win-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+    .win-btn.close:hover {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    /* ── Main Layout: Sidebar + Workspace + Utility Panel ────────── */
+    .app-body {
+      display: flex;
+      flex: 1 1 0;
+      min-height: 0;
+      max-height: calc(100vh - 44px);
+      width: 100%;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar Navigation ───────────────────────────────────────── */
+    .sidebar {
+      width: 180px;
+      flex: 0 0 180px;
+      height: 100%;
+      min-height: 0;
+      background: #080c14;
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14px 10px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 10;
+    }
+    .sidebar-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: var(--radius-md);
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
       font-size: 13px;
-      outline: none;
-      max-width: 260px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: none !important;
     }
-    .model-badge {
-      margin-left: auto;
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+    }
+    .nav-item.active {
+      background: #1e3a8a;
+      color: #fff;
+      font-weight: 600;
+      border: 1px solid rgba(59, 130, 246, 0.45);
+      box-shadow: none;
+    }
+    .nav-item svg {
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+    .nav-item.active svg {
+      opacity: 1;
+    }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 8px 4px;
+    }
+    .sidebar-quote {
+      font-size: 13px;
+      font-style: italic;
+      color: #94a3b8;
+      line-height: 1.4;
+      padding: 0 6px;
+    }
+    .sidebar-quote .quote-words {
+      font-size: 13.5px;
+      font-style: italic;
+      color: #cbd5e1;
+      display: block;
+      line-height: 1.35;
+    }
+    .sidebar-quote .powered-by-label {
+      font-style: normal;
+      font-size: 10px;
+      color: #64748b;
+      display: block;
+      margin-top: 14px;
+      line-height: 1.35;
+    }
+    
+    .sidebar-status-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+    .sidebar-status-card:hover {
+      border-color: var(--border-card);
+    }
+    .status-text-block {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .status-title {
       font-size: 11px;
-      background: #0f3460;
-      color: #53a8b6;
-      padding: 2px 8px;
-      border-radius: 10px;
+      font-weight: 600;
+      color: #fff;
       display: flex;
       align-items: center;
       gap: 6px;
     }
+    .status-title::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--emerald);
+    }
+    .status-sub {
+      font-size: 10px;
+      color: var(--emerald);
+      font-weight: 500;
+    }
 
-    /* ── Chat area ── */
-    .chat {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
+    /* ── Main Viewport ────────────────────────────────────────────── */
+    .viewport {
+      flex: 1 1 0;
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+      /* Transparent so body background image shows through with no flash */
+      background: transparent;
+      /* Own compositor layer — prevents bg re-rasterization on tab switch */
+      transform: translateZ(0);
+      will-change: contents;
+    }
+
+    .tab-panel {
+      display: none !important;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      /* Transparent — background image on body always shows through */
+      background: transparent;
+    }
+    .tab-panel.active {
+      display: flex !important;
+    }
+
+    /* ── CHAT TAB: Hub Layout ─────────────────────────────────────── */
+    .chat-workspace {
+      display: flex;
+      flex-direction: row;
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .chat-center-column {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      padding: 14px 18px 12px 18px;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    /* Greeting Header */
+    .greeting-banner {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex: 0 0 auto;
       gap: 12px;
+    .greeting-title {
+      font-size: 23px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: -0.01em;
     }
-    .message {
-      max-width: 75%;
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-size: 14px;
-      line-height: 1.5;
-      word-wrap: break-word;
-    }
-    .message-content p {
+
+    /* Markdown pre/code rendering support */
+    .message-content p, .msg-text-content p {
       margin-bottom: 8px;
     }
-    .message-content p:last-child {
+    .message-content p:last-child, .msg-text-content p:last-child {
       margin-bottom: 0;
     }
-    .message-content pre {
+    .message-content pre, .msg-text-content pre {
       background: #0f0f23;
       padding: 8px;
       border-radius: 6px;
       overflow-x: auto;
       margin: 8px 0;
     }
-    .message-content code {
+    .message-content code, .msg-text-content code {
       background: #0f0f23;
       padding: 2px 4px;
       border-radius: 4px;
       font-family: monospace;
     }
-    .message.user {
-      align-self: flex-end;
-      background: #e94560;
-      color: white;
-      border-bottom-right-radius: 4px;
-    }
-    .message.assistant {
-      align-self: flex-start;
-      background: #1a1a3e;
-      border: 1px solid #2a2a4a;
-      border-bottom-left-radius: 4px;
-    }
-    .message.system {
-      align-self: center;
-      background: transparent;
-      color: #8a8a9a;
-      font-size: 12px;
-      max-width: 90%;
-      text-align: center;
-    }
-    .message-agent-tag {
-      font-size: 10px;
-      color: #53a8b6;
-      margin-bottom: 4px;
-      font-weight: 600;
-    }
-
-    /* ── Input area ── */
-    .input-area {
-      display: flex;
-      gap: 8px;
-      padding: 12px 16px;
-      background: #16213e;
-      border-top: 1px solid #2a2a4a;
-      flex-shrink: 0;
-    }
-    .input-area input {
-      flex: 1;
-      padding: 10px 14px;
-      border-radius: 8px;
-      border: 1px solid #333;
-      background: #0f0f23;
-      color: #e0e0e0;
-      font-size: 14px;
-      outline: none;
-    }
-    .input-area input:focus { border-color: #e94560; }
-    .send-btn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: none;
-      background: #e94560;
-      color: white;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 14px;
-      transition: background 0.15s;
-    }
-    .send-btn:hover { background: #c73e54; }
-    .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    /* ── Header & Sections for Non-Chat Tabs ── */
-    .tab-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid #2a2a4a;
-      padding-bottom: 12px;
-    }
-    .tab-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #ffffff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .tab-subtitle {
-      font-size: 12px;
-      color: #8a8a9a;
+    .greeting-subtitle {
+      font-size: 12.5px;
+      color: #94a3b8;
       margin-top: 2px;
     }
-    .search-input {
-      background: #16213e;
-      border: 1px solid #2a2a4a;
-      border-radius: 6px;
-      color: #e0e0e0;
-      padding: 6px 12px;
-      font-size: 13px;
-      outline: none;
-      width: 220px;
-    }
-    .search-input:focus { border-color: #e94560; }
 
-    /* ── Agents Tab Cards ── */
-    .agents-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 16px;
+    .live-clock-widget {
+      text-align: right;
+      flex-shrink: 0;
     }
-    .agent-card {
-      background: #16213e;
-      border: 1px solid #2a2a4a;
+    .live-date {
+      font-size: 11px;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 2px;
+    }
+    .live-time {
+      font-size: 23px;
+      font-weight: 700;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em;
+    }
+
+    /* Quick Action Prompt Chips - Responsive 5-Column Grid */
+    .quick-chips-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+      flex: 0 0 auto;
+      overflow: hidden;
+    }
+    .quick-chip {
+      background: rgba(16, 22, 36, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 10px;
-      padding: 16px;
+      padding: 8px 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      cursor: pointer;
+      transition: background-color 90ms ease, border-color 90ms ease;
+      overflow: hidden;
+    }
+    .quick-chip:hover {
+      background: rgba(28, 38, 60, 0.92);
+      border-color: rgba(99, 130, 246, 0.6);
+    }
+    .quick-chip:active {
+      opacity: 0.88;
+    }
+    .chip-icon-box {
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .chip-icon-box.concept { background: rgba(244, 63, 94, 0.15); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.25); }
+    .chip-icon-box.problem { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.25); }
+    .chip-icon-box.plan    { background: rgba(37, 99, 235, 0.15); color: #60a5fa; border: 1px solid rgba(37, 99, 235, 0.25); }
+    .chip-icon-box.notes   { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.25); }
+    .chip-icon-box.practice{ background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+
+    .chip-text {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      transition: transform 0.15s, border-color 0.15s;
+      gap: 1px;
+      min-width: 0;
+      overflow: hidden;
     }
-    .agent-card:hover {
-      border-color: #53a8b6;
-      transform: translateY(-2px);
+    .chip-title {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .agent-card-header {
+    .chip-desc {
+      font-size: 10px;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Ambient Chat Canvas */
+    .chat-hero-stage {
+      flex: 1 1 0;
+      min-height: 80px;
+      background: rgba(10, 15, 26, 0.60);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+    }
+    
+    .chat-feed {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      user-select: text;
+    }
+
+    /* System Banner Message */
+    .system-announcement-card {
+      background: rgba(16, 23, 38, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+    .system-announcement-card .system-icon-box {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1e3a8a;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .system-announcement-card .system-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 2px;
+    }
+    .system-announcement-card .system-desc {
+      font-size: 12px;
+      color: #cbd5e1;
+      line-height: 1.45;
+    }
+    .system-announcement-card .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      background: rgba(37, 99, 235, 0.15);
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Message Rows */
+    .msg-row {
+      display: flex;
+      gap: 12px;
+      animation: fadeIn 120ms ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .msg-row.user {
+      justify-content: flex-end;
+    }
+    .msg-bubble {
+      max-width: 84%;
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      font-size: 13.5px;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+    .msg-row.user .msg-bubble {
+      background: var(--accent-blue);
+      color: #fff;
+      border-bottom-right-radius: 2px;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+    .msg-row.assistant .msg-bubble {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-card);
+      color: #f1f5f9;
+      border-bottom-left-radius: 2px;
+    }
+
+    .msg-tag {
+      font-size: 10px;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 4px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Embedded Markdown Styles */
+    .msg-bubble p { margin-bottom: 8px; }
+    .msg-bubble p:last-child { margin-bottom: 0; }
+    .msg-bubble strong { font-weight: 600; color: #fff; }
+    .msg-bubble em { font-style: italic; color: #cbd5e1; }
+    .msg-bubble h1, .msg-bubble h2, .msg-bubble h3 { color: #fff; margin: 12px 0 6px 0; font-weight: 600; }
+    .msg-bubble h1 { font-size: 16px; }
+    .msg-bubble h2 { font-size: 14.5px; }
+    .msg-bubble h3 { font-size: 13.5px; }
+    .msg-bubble ul, .msg-bubble ol { margin: 6px 0 10px 18px; }
+    .msg-bubble li { margin-bottom: 3px; }
+    .msg-bubble blockquote {
+      border-left: 2px solid var(--accent-blue);
+      padding: 4px 10px;
+      background: rgba(37, 99, 235, 0.08);
+      color: var(--text-secondary);
+      margin: 8px 0;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+    .msg-bubble code.inline {
+      background: rgba(0, 0, 0, 0.4);
+      color: #38bdf8;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* Code Block Box */
+    .code-box {
+      margin: 10px 0;
+      background: var(--bg-code);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .code-box-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      padding: 5px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
     }
-    .agent-card-name {
-      font-size: 15px;
-      font-weight: 600;
-      color: #ffffff;
-    }
-    .agent-card-badge {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: #0f3460;
-      color: #53a8b6;
-    }
-    .agent-card-desc {
-      font-size: 12px;
-      color: #b0b0c0;
-      line-height: 1.4;
-      flex: 1;
-    }
-    .agent-card-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
-    .agent-tag {
-      font-size: 10px;
-      background: #1f2847;
-      color: #8a8a9a;
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-    .agent-action-btn {
-      align-self: flex-start;
-      margin-top: 6px;
-      padding: 6px 12px;
-      background: #e94560;
-      color: white;
+    .code-copy-btn {
+      background: transparent;
       border: none;
-      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .code-copy-btn:hover { color: #fff; }
+    .code-box pre {
+      padding: 12px 14px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: #e2e8f0;
+    }
+
+    .stream-cursor {
+      display: inline-block;
+      width: 6px;
+      height: 14px;
+      background: #38bdf8;
+      vertical-align: middle;
+      margin-left: 4px;
+      animation: blink 0.8s infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* Elegant Bottom Floating Composer */
+    .composer-wrapper {
+      background: rgba(14, 20, 32, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: var(--radius-lg);
+      padding: 10px 14px 8px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 6px 28px rgba(0, 0, 0, 0.4);
+      flex: 0 0 auto;
+      width: 100%;
+    }
+    .composer-wrapper:focus-within {
+      border-color: rgba(99, 130, 246, 0.55);
+      box-shadow: 0 6px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(99, 130, 246, 0.3);
+    }
+    .composer-textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #f8fafc;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.45;
+      resize: none;
+      outline: none;
+      min-height: 24px;
+      max-height: 110px;
+    }
+    .composer-textarea::placeholder {
+      color: #94a3b8;
+    }
+    .composer-bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 3px;
+    }
+    .composer-left-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .agent-selector-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-sm);
+      padding: 3px 8px;
+    }
+    .agent-selector-select {
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 500;
+      outline: none;
+      cursor: pointer;
+    }
+    .agent-selector-select option {
+      background: var(--bg-surface);
+      color: #fff;
+    }
+    .shortcut-hint {
+      font-size: 10.5px;
+      color: #64748b;
+    }
+    
+    .composer-right-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tool-icon-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .tool-icon-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+    .btn-send-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s;
+      box-shadow: 0 2px 10px var(--accent-glow);
     }
-    .agent-action-btn:hover { background: #c73e54; }
+    .btn-send-pill:hover {
+      background: var(--accent-blue-hover);
+    }
+    .btn-send-pill:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .btn-stop-pill {
+      display: none;
+      padding: 5px 10px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--rose);
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
 
-    /* ── Courses Tab ── */
-    .stats-card {
-      background: #16213e;
-      border: 1px solid #2a2a4a;
-      border-radius: 10px;
-      padding: 16px;
-      display: flex;
-      gap: 20px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .stat-box {
+    /* ── Right Utility Dashboard ──────────────────────────────────── */
+    .right-utility-panel {
+      width: 260px;
+      flex: 0 0 260px;
+      height: 100%;
+      min-height: 0;
+      background: rgba(8, 12, 20, 0.90);
+      border-left: 1px solid rgba(255, 255, 255, 0.05);
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      padding: 14px 12px;
+      gap: 12px;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
-    .stat-val { font-size: 20px; font-weight: bold; color: #53a8b6; }
-    .stat-lbl { font-size: 11px; color: #8a8a9a; }
-    .progress-bar {
-      flex: 1;
-      min-width: 200px;
-      height: 10px;
-      background: #0f0f23;
-      border-radius: 5px;
-      overflow: hidden;
-      margin-top: 4px;
+    
+    .panel-quote-card {
+      font-size: 11.5px;
+      font-style: italic;
+      color: #94a3b8;
+      padding: 12px 14px;
+      line-height: 1.5;
+      background: rgba(18, 25, 40, 0.60);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: var(--radius-md);
     }
-    .progress-fill {
-      height: 100%;
-      background: #27c93f;
-      border-radius: 5px;
-      width: 0%;
-      transition: width 0.3s;
-    }
-    .concepts-list {
+
+    .utility-card {
+      background: rgba(18, 25, 40, 0.65);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 14px 14px;
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
-    .concept-item {
-      background: #16213e;
-      border: 1px solid #2a2a4a;
-      border-radius: 8px;
-      padding: 12px 16px;
+    .utility-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
     }
-    .concept-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-    .concept-title { font-size: 14px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px; }
-    .concept-subject { font-size: 10px; background: #0f3460; color: #53a8b6; padding: 1px 6px; border-radius: 4px; }
-    .concept-desc { font-size: 12px; color: #8a8a9a; }
-    .concept-mastery { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 130px; }
-    .concept-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: none;
-      background: #0f3460;
-      color: #53a8b6;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .concept-btn:hover { background: #164273; color: #fff; }
-
-    /* ── Settings Tab ── */
-    .settings-section {
-      background: #16213e;
-      border: 1px solid #2a2a4a;
-      border-radius: 10px;
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .settings-section-title {
-      font-size: 15px;
+    .utility-title {
+      font-size: 12.5px;
       font-weight: 600;
       color: #fff;
-      border-bottom: 1px solid #1f2847;
-      padding-bottom: 8px;
     }
-    .settings-row {
+    .utility-link {
+      font-size: 11px;
+      color: var(--accent-blue);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .utility-link:hover { text-decoration: underline; }
+
+    /* Sessions Mini List */
+    .session-mini-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .session-mini-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 120ms;
+    }
+    .session-mini-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .session-mini-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .session-mini-icon.blue { background: rgba(37, 99, 235, 0.15); color: #60a5fa; }
+    .session-mini-icon.green { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .session-mini-icon.amber { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .session-mini-icon.purple { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+    .session-mini-icon.rose { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+
+    .session-mini-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .session-mini-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-mini-time {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+    .session-mini-arrow {
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+
+
+    /* ── VIEW 2, 3, 4: Scrollable Section Container ───────────────── */
+    .view-container {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      background: transparent;
+    }
+    .section-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 14px;
     }
-    .settings-label-block { display: flex; flex-direction: column; gap: 2px; }
-    .settings-label { font-size: 13px; font-weight: 500; color: #e0e0e0; }
-    .settings-caption { font-size: 11px; color: #8a8a9a; }
-    .settings-select, .settings-input {
-      background: #0f0f23;
-      border: 1px solid #333;
-      border-radius: 6px;
-      color: #e0e0e0;
-      padding: 6px 10px;
-      font-size: 13px;
-      outline: none;
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
     }
-    .settings-btn {
-      padding: 6px 14px;
-      border-radius: 6px;
-      border: none;
-      background: #e94560;
-      color: white;
+    .section-subtitle {
       font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
+      color: var(--text-secondary);
+      margin-top: 2px;
     }
-    .settings-btn.secondary {
-      background: #1f2847;
-      color: #8a8a9a;
+
+    /* Cards Grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
     }
-    .settings-btn.secondary:hover { background: #2a355c; color: #e0e0e0; }
-    .session-list {
+    .glass-card {
+      background: var(--bg-surface-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 220px;
-      overflow-y: auto;
     }
-    .session-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #0f0f23;
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 12px;
+    .glass-card:hover {
+      background: var(--bg-surface-elevated);
+      border-color: var(--border-hover);
+    }
+    
+    /* Interactive DAG Canvas */
+    .dag-canvas-box {
+      height: 480px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      position: relative;
+      overflow: hidden;
+    }
+    .dag-svg {
+      width: 100%;
+      height: 100%;
+    }
+    .dag-inspector {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      bottom: 12px;
+      width: 300px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4);
     }
 
-    /* ── Status indicator ── */
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      display: inline-block;
+    /* Modal Backdrop & Dialog */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(4, 6, 11, 0.82);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
     }
-    .status-dot.ready { background: #27c93f; }
-    .status-dot.loading { background: #f5c542; animation: pulse 1s infinite; }
-    .status-dot.error { background: #e94560; }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
+    .modal-backdrop.active {
+      display: flex;
+    }
+    .modal-dialog {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-lg);
+      width: 90%;
+      max-width: 680px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .quiz-option-card {
+      background: var(--bg-surface-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 120ms ease;
+    }
+    .quiz-option-card:hover {
+      border-color: var(--accent-blue);
+      background: rgba(37, 99, 235, 0.08);
+    }
+    .quiz-option-card.selected {
+      border-color: var(--accent-blue);
+      background: rgba(37, 99, 235, 0.18);
+    }
+    .k12-badge-remedial {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .k12-badge-core {
+      background: rgba(37, 99, 235, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(37, 99, 235, 0.3);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .k12-badge-advanced {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .k12-badge-new {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-dim);
+      border: 1px solid var(--border-subtle);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
+    /* Form Elements */
+    .glass-input {
+      background: var(--bg-input);
+      border: 1px solid var(--border-card);
+      color: var(--text-main);
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      outline: none;
+    }
+    .glass-input:focus {
+      border-color: var(--accent-blue);
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-logo">G</div>
-      <button class="sidebar-btn active" title="Chat" onclick="switchTab('chat', this)">💬</button>
-      <button class="sidebar-btn" title="Agents" onclick="switchTab('agents', this)">🤖</button>
-      <button class="sidebar-btn" title="Courses" onclick="switchTab('courses', this)">📚</button>
-      <button class="sidebar-btn" title="Settings" onclick="switchTab('settings', this)">⚙️</button>
-    </div>
-
-    <!-- Main -->
-    <div class="main">
-      <!-- Titlebar -->
-      <div class="titlebar">
-        <span class="titlebar-text">Gayatri AI — Desktop Workspace</span>
-        <div class="titlebar-controls">
-          <button class="titlebar-btn btn-minimize" onclick="minimizeWindow()" title="Minimize"></button>
-          <button class="titlebar-btn btn-maximize" onclick="maximizeWindow()" title="Maximize / Restore"></button>
-          <button class="titlebar-btn btn-close" onclick="closeWindow()" title="Close"></button>
+  <div class="app-window">
+    
+    <!-- ── Frameless Titlebar ── -->
+    <header class="titlebar">
+      <div class="titlebar-brand">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
         </div>
+        <span class="brand-name">Gayatri Tutor</span>
+        <span class="brand-tag">DESKTOP V3.0</span>
       </div>
 
-      <!-- VIEW 1: CHAT TAB -->
-      <div class="tab-view active" id="tab-chat">
-        <!-- Agent bar -->
-        <div class="agent-bar">
-          <span class="agent-label">Agent:</span>
-          <select class="agent-select" id="agentSelect">
-            <option value="auto">🤖 Auto-detect</option>
-          </select>
-          <button class="settings-btn secondary" onclick="startNewChat()" style="margin-left: 8px; padding: 4px 8px; font-size: 11px;">+ New Chat</button>
-          <span class="model-badge" id="modelBadge">
-            <span class="status-dot loading" id="statusDot"></span>
-            <span id="statusText">Loading model...</span>
-          </span>
+      <div class="titlebar-actions">
+        <div class="pill-status" id="modelStatusPill">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Local Ready (1.3 GB)</span>
         </div>
-
-        <!-- Chat messages -->
-        <div class="chat" id="chat">
-          <div class="message system">
-            Welcome to Gayatri AI. Type a message to start chatting,
-            or select a specialized agent from the dropdown above.
-          </div>
-        </div>
-
-        <!-- Input -->
-        <div class="input-area">
-          <input type="text" id="userInput" placeholder="Type a message or question..."
-                 autocomplete="off" onkeydown="if(event.key==='Enter')send()">
-          <button class="send-btn" id="sendBtn" onclick="send()">Send</button>
-          <button class="send-btn" id="stopBtn" onclick="cancelGeneration()" style="display: none; background: #666;">Stop</button>
+        <button class="btn-new-session" onclick="startNewChat()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg>
+          <span>New Session</span>
+        </button>
+        <div class="window-controls">
+          <button class="win-btn" onclick="minimizeWindow()" title="Minimize">
+            <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+          <button class="win-btn" onclick="maximizeWindow()" title="Maximize / Restore">
+            <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+          </button>
+          <button class="win-btn close" onclick="closeWindow()" title="Close">
+            <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5" stroke="currentColor" stroke-width="1.2"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
         </div>
       </div>
+    </header>
 
-      <!-- VIEW 2: AGENTS TAB -->
-      <div class="tab-view" id="tab-agents">
-        <div class="tab-scrollable">
-          <div class="tab-header">
-            <div>
-              <div class="tab-title">🤖 Agents & Specialists</div>
-              <div class="tab-subtitle">Specialized reasoning engines and Socratic tutors</div>
-            </div>
-            <input type="text" class="search-input" id="agentSearchInput" placeholder="Filter agents..." oninput="filterAgents()">
+    <!-- ── App Body ── -->
+    <div class="app-body">
+      
+      <!-- ── Left Sidebar Navigation ── -->
+      <aside class="sidebar">
+        <div class="sidebar-menu">
+          <button class="nav-item active" onclick="switchView('chat', this)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Chat</span>
+          </button>
+          <button class="nav-item" onclick="switchView('sessions', this)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Sessions</span>
+          </button>
+          <button class="nav-item" onclick="switchView('courses', this)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span>Knowledge</span>
+          </button>
+          <button class="nav-item" onclick="switchView('agents', this)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><line x1="6" y1="9" x2="12" y2="15"/><line x1="18" y1="9" x2="12" y2="15"/></svg>
+            <span>Tools</span>
+          </button>
+          <button class="nav-item" onclick="switchView('settings', this)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Settings</span>
+          </button>
+        </div>
+
+        <div class="sidebar-bottom">
+          <div class="sidebar-quote">
+            <span class="quote-words">“Learn<br>‘Build’<br>Grow”</span>
+            <span class="powered-by-label">Powered by<br>Gayatri Tutor</span>
           </div>
-          <div class="agents-grid" id="agentsContainer">
-            <!-- Dynamic agent cards -->
-            <div style="color: #8a8a9a; font-size: 13px;">Loading available agents...</div>
+
+          <div class="sidebar-status-card" onclick="switchView('settings')">
+            <div class="status-text-block">
+              <span class="status-title">Local Mode</span>
+              <span class="status-sub" id="sidebarModelSize">1.3 GB</span>
+            </div>
+            <span style="color: var(--text-dim); font-size: 11px;">›</span>
           </div>
         </div>
-      </div>
+      </aside>
 
-      <!-- VIEW 3: COURSES TAB (LDG) -->
-      <div class="tab-view" id="tab-courses">
-        <div class="tab-scrollable">
-          <div class="tab-header">
-            <div>
-              <div class="tab-title">📚 Courses & Curriculum Graph</div>
-              <div class="tab-subtitle">Learning Dependency Graph progress and concept mastery</div>
-            </div>
-            <button class="settings-btn secondary" onclick="loadCoursesTab()">Refresh</button>
-          </div>
-          <div class="stats-card" id="coursesStats">
-            <div class="stat-box">
-              <span class="stat-val" id="statTotal">0</span>
-              <span class="stat-lbl">Total Concepts</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-val" id="statMastered" style="color:#27c93f;">0</span>
-              <span class="stat-lbl">Mastered</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-val" id="statInProgress" style="color:#f5c542;">0</span>
-              <span class="stat-lbl">In Progress</span>
-            </div>
-            <div style="flex:1; min-width:180px;">
-              <div style="display:flex; justify-content:space-between; font-size:11px; color:#8a8a9a;">
-                <span>Overall Mastery</span>
-                <span id="statPct">0%</span>
+      <!-- ── Center Viewport ── -->
+      <main class="viewport">
+
+        <!-- ── TAB 1: CHAT & TUTOR HUB ── -->
+        <div class="tab-panel active" id="tab-chat">
+          <div class="chat-workspace">
+            
+            <!-- Center Column -->
+            <div class="chat-center-column">
+              
+              <!-- Greeting & Clock -->
+              <div class="greeting-banner">
+                <div>
+                  <h1 class="greeting-title">Good to see you! 👋</h1>
+                  <p class="greeting-subtitle">Your personal AI tutor, ready when you are.</p>
+                </div>
+                <div class="live-clock-widget">
+                  <div class="live-date" id="liveDateStr">Wed, 17 Sep 2026</div>
+                  <div class="live-time" id="liveTimeStr">03:29 PM</div>
+                </div>
               </div>
-              <div class="progress-bar">
-                <div class="progress-fill" id="statProgressFill"></div>
+
+              <!-- Quick Action Prompt Chips -->
+              <div class="quick-chips-row">
+                <div class="quick-chip" onclick="triggerQuickAction('explain')">
+                  <div class="chip-icon-box concept">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+                  </div>
+                  <div class="chip-text">
+                    <span class="chip-title">Explain a Concept</span>
+                    <span class="chip-desc">Get simple explanations</span>
+                  </div>
+                </div>
+
+                <div class="quick-chip" onclick="triggerQuickAction('solve')">
+                  <div class="chip-icon-box problem">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                  </div>
+                  <div class="chip-text">
+                    <span class="chip-title">Solve a Problem</span>
+                    <span class="chip-desc">Step-by-step solutions</span>
+                  </div>
+                </div>
+
+                <div class="quick-chip" onclick="triggerQuickAction('plan')">
+                  <div class="chip-icon-box plan">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                  </div>
+                  <div class="chip-text">
+                    <span class="chip-title">Plan My Learning</span>
+                    <span class="chip-desc">Personalized roadmap</span>
+                  </div>
+                </div>
+
+                <div class="quick-chip" onclick="triggerQuickAction('notes')">
+                  <div class="chip-icon-box notes">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  </div>
+                  <div class="chip-text">
+                    <span class="chip-title">Summarize Notes</span>
+                    <span class="chip-desc">Turn content into points</span>
+                  </div>
+                </div>
+
+                <div class="quick-chip" onclick="triggerQuickAction('practice')">
+                  <div class="chip-icon-box practice">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                  </div>
+                  <div class="chip-text">
+                    <span class="chip-title">Generate Practice</span>
+                    <span class="chip-desc">Quizzes & questions</span>
+                  </div>
+                </div>
               </div>
+
+              <!-- Chat Feed / Hero Stage -->
+              <div class="chat-hero-stage">
+                <div class="chat-feed" id="chatFeed">
+                  <div class="system-announcement-card">
+                    <div class="system-icon-box">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                    </div>
+                    <div class="system-text-block">
+                      <div class="system-title">Gayatri Tutor</div>
+                      <div class="system-desc">System initialized in Local Mode. Type a question or request a topic to begin personalized Socratic tutoring.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bottom Floating Composer -->
+              <div class="composer-wrapper">
+                <textarea class="composer-textarea" id="userInput" rows="1"
+                          placeholder="Ask a question or explain what you'd like to learn..."
+                          oninput="autoResize(this)"
+                          onkeydown="handleKey(event)"></textarea>
+                
+                <div class="composer-bottom-bar">
+                  <div class="composer-left-tools">
+                    <div class="agent-selector-pill">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                      <select class="agent-selector-select" id="agentSelect">
+                        <option value="auto">Auto-detect Agent</option>
+                      </select>
+                    </div>
+                    <span class="shortcut-hint">Shift + Enter for newline</span>
+                  </div>
+
+                  <div class="composer-right-tools">
+                    <button class="btn-stop-pill" id="stopBtn" onclick="stopStream()">Stop</button>
+                    <button class="btn-send-pill" id="sendBtn" onclick="sendPrompt()">
+                      <span>Send</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </div>
-          </div>
-          <div class="concepts-list" id="curriculumContainer">
-            <div style="color: #8a8a9a; font-size: 13px;">Loading curriculum progress...</div>
+
+            <!-- Right Utility Panel -->
+            <aside class="right-utility-panel">
+              <div class="panel-quote-card">
+                “Discipline today,<br>a brighter tomorrow.”
+              </div>
+
+              <!-- Recent Sessions -->
+              <div class="utility-card">
+                <div class="utility-header">
+                  <span class="utility-title">Recent Sessions</span>
+                  <a class="utility-link" onclick="switchView('sessions')">See all</a>
+                </div>
+                <div class="session-mini-list" id="miniSessionsList">
+                  <div class="session-mini-item" onclick="quickFillPrompt('Machine Learning Concepts')">
+                    <div class="session-mini-icon blue">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    </div>
+                    <div class="session-mini-info">
+                      <div class="session-mini-name">Machine Learning Concepts</div>
+                      <div class="session-mini-time">2 hours ago</div>
+                    </div>
+                    <span class="session-mini-arrow">›</span>
+                  </div>
+
+                  <div class="session-mini-item" onclick="quickFillPrompt('Python DSA Problems')">
+                    <div class="session-mini-icon green">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    </div>
+                    <div class="session-mini-info">
+                      <div class="session-mini-name">Python DSA Problems</div>
+                      <div class="session-mini-time">5 hours ago</div>
+                    </div>
+                    <span class="session-mini-arrow">›</span>
+                  </div>
+
+                  <div class="session-mini-item" onclick="quickFillPrompt('System Design Basics')">
+                    <div class="session-mini-icon amber">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                    </div>
+                    <div class="session-mini-info">
+                      <div class="session-mini-name">System Design Basics</div>
+                      <div class="session-mini-time">1 day ago</div>
+                    </div>
+                    <span class="session-mini-arrow">›</span>
+                  </div>
+
+                  <div class="session-mini-item" onclick="quickFillPrompt('Resume Improvement')">
+                    <div class="session-mini-icon purple">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </div>
+                    <div class="session-mini-info">
+                      <div class="session-mini-name">Resume Improvement</div>
+                      <div class="session-mini-time">2 days ago</div>
+                    </div>
+                    <span class="session-mini-arrow">›</span>
+                  </div>
+
+                  <div class="session-mini-item" onclick="quickFillPrompt('Project Ideas - AI')">
+                    <div class="session-mini-icon rose">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+                    </div>
+                    <div class="session-mini-info">
+                      <div class="session-mini-name">Project Ideas - AI</div>
+                      <div class="session-mini-time">3 days ago</div>
+                    </div>
+                    <span class="session-mini-arrow">›</span>
+                  </div>
+                </div>
+              </div>
+
+
+              <!-- Socratic Footer Quote -->
+              <div class="panel-quote-card" style="margin-top:auto;">
+                “The best way to learn<br>is to ask the right questions.”<br><br>
+                <span style="color:var(--text-dim); font-size:11px;">— Socratic Method</span>
+              </div>
+            </aside>
+
           </div>
         </div>
-      </div>
 
-      <!-- VIEW 4: SETTINGS TAB -->
-      <div class="tab-view" id="tab-settings">
-        <div class="tab-scrollable">
-          <div class="tab-header">
-            <div>
-              <div class="tab-title">⚙️ System & Model Settings</div>
-              <div class="tab-subtitle">Configure privacy boundary, model weights, API keys, and session storage</div>
-            </div>
-          </div>
-
-          <!-- Privacy Mode Section -->
-          <div class="settings-section">
-            <div class="settings-section-title">Privacy Mode & Egress Boundary</div>
-            <div class="settings-row">
-              <div class="settings-label-block">
-                <span class="settings-label">Execution Mode</span>
-                <span class="settings-caption">Strictly enforces whether prompts may be sent to external cloud APIs</span>
+        <!-- ── TAB 2: SESSIONS HISTORY ── -->
+        <div class="tab-panel" id="tab-sessions">
+          <div class="view-container">
+            <div class="section-header">
+              <div>
+                <h2 class="section-title">Saved Sessions</h2>
+                <p class="section-subtitle">Manage, restore, or export previous learning transcripts</p>
               </div>
-              <select class="settings-select" id="privacyModeSelect" onchange="savePrivacyMode()">
-                <option value="local_only">Local Only (Zero Data Leak - Strictly Offline)</option>
-                <option value="cloud_allowed">Cloud Allowed (Enable Cloud Fallbacks)</option>
-              </select>
+              <button class="btn-new-session" onclick="startNewChat()">+ New Session</button>
+            </div>
+            <div id="fullSessionsContainer" style="display:flex; flex-direction:column; gap:8px;">
+              <div style="color: var(--text-dim); font-size:12px;">Loading stored sessions...</div>
             </div>
           </div>
+        </div>
 
-          <!-- Local AI Model Management -->
-          <div class="settings-section">
-            <div class="settings-section-title">Local AI Model (Ollama / GGUF)</div>
-            <div class="settings-row">
-              <div class="settings-label-block">
-                <span class="settings-label" id="localModelTitle">Local Model Status</span>
-                <span class="settings-caption" id="localModelDetail">Checking local model file...</span>
+        <!-- ── TAB 3: KNOWLEDGE & K-12 CURRICULA ── -->
+        <div class="tab-panel" id="tab-courses">
+          <div class="view-container">
+            <div class="section-header">
+              <div>
+                <h2 class="section-title">K-12 Curricula & Knowledge Graph</h2>
+                <p class="section-subtitle">Adaptive course modules, placement diagnostics, and prerequisite tracking</p>
               </div>
               <div style="display:flex; gap:8px;">
-                <button class="settings-btn" id="btnDownloadModel" onclick="downloadModel()">Download / Install</button>
-                <button class="settings-btn secondary" id="btnCancelDownload" onclick="cancelDownload()" style="display:none;">Cancel</button>
+                <button class="btn-send-pill" id="subtab-k12-btn" onclick="switchKnowledgeSubtab('k12')">📚 K-12 Courses</button>
+                <button class="btn-send-pill" id="subtab-ldg-btn" style="background:transparent; border:1px solid var(--border-card); color:var(--text-secondary);" onclick="switchKnowledgeSubtab('ldg')">🕸 LDG Graph</button>
+                <button class="btn-send-pill" style="background:transparent; border:1px solid var(--border-card); color:var(--text-secondary);" onclick="refreshCoursesData()">Refresh</button>
               </div>
             </div>
-            <div id="downloadProgressContainer" style="display:none; margin-top:8px;">
-              <span style="font-size:11px; color:#8a8a9a;" id="downloadProgressText">Downloading...</span>
-              <div class="progress-bar" style="margin-top:4px;">
-                <div class="progress-fill" id="downloadProgressFill" style="background:#53a8b6; width:0%;"></div>
+
+            <!-- Subtab 1: K-12 Courses & Placement Tests -->
+            <div id="k12CoursesPanel" style="display:flex; flex-direction:column; gap:16px; overflow-y:auto;">
+              <div id="k12CoursesList" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+                <div style="color:var(--text-dim); font-size:12px;">Loading K-12 courses...</div>
               </div>
+            </div>
+
+            <!-- Subtab 2: Existing LDG Graph Canvas (Preserved) -->
+            <div id="ldgCanvasPanel" style="display:none; flex-direction:column;">
+              <div class="dag-canvas-box">
+                <svg class="dag-svg" id="dagSvg"></svg>
+                <div class="dag-inspector" id="conceptDrawer">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span id="drawerSubject" style="font-size:11px; font-weight:700; color: #38bdf8;">TOPIC</span>
+                    <button onclick="closeConceptDrawer()" style="background:transparent; border:none; color:var(--text-dim); cursor:pointer;">✕</button>
+                  </div>
+                  <h3 id="drawerTitle" style="color:#fff; font-size:15px;">Concept</h3>
+                  <p id="drawerDesc" style="font-size:12px; color:var(--text-secondary); line-height:1.5; flex:1;">Description...</p>
+                  <div style="background:rgba(0,0,0,0.25); padding:10px; border-radius:var(--radius-sm);">
+                    <div style="font-size:11px; color:var(--text-dim);">Mastery:</div>
+                    <strong id="drawerMasteryScore" style="color:var(--emerald); font-size:16px;">0%</strong>
+                  </div>
+                  <button class="btn-send-pill" onclick="studySelectedConcept()" style="width:100%;">Study Concept</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── TAB 4: TOOLS / AGENTS ── -->
+        <div class="tab-panel" id="tab-agents">
+          <div class="view-container">
+            <div class="section-header">
+              <div>
+                <h2 class="section-title">Specialist AI Agents</h2>
+                <p class="section-subtitle">Orchestrated multi-agent ecosystem for tutoring, code review, and exercise generation</p>
+              </div>
+              <input type="text" class="glass-input" id="agentSearch" placeholder="Filter agents..." style="width:200px;" oninput="filterAgentsList()">
+            </div>
+            <div class="cards-grid" id="agentsContainer">
+              <div style="color: var(--text-dim); font-size:12px;">Loading available agents...</div>
             </div>
           </div>
+        </div>
 
-          <!-- Provider API Keys -->
-          <div class="settings-section">
-            <div class="settings-section-title">Cloud Provider API Keys (Windows DPAPI Encrypted)</div>
-            <div class="settings-row">
-              <div class="settings-label-block">
-                <span class="settings-label">Google Gemini</span>
-                <span class="settings-caption">Gemini 1.5 Flash / Pro API key</span>
-              </div>
-              <div style="display:flex; gap:6px;">
-                <input type="password" class="settings-input" id="key-google" placeholder="AIzaSy..." style="width:200px;">
-                <button class="settings-btn secondary" onclick="validateKey('google')">Test</button>
-                <button class="settings-btn" onclick="saveKey('google')">Save</button>
+        <!-- ── TAB 5: SETTINGS ── -->
+        <div class="tab-panel" id="tab-settings">
+          <div class="view-container">
+            <div class="section-header">
+              <div>
+                <h2 class="section-title">Settings & Privacy Policy</h2>
+                <p class="section-subtitle">Local storage boundary, Windows DPAPI credential vault, and GGUF parameters</p>
               </div>
             </div>
-            <div class="settings-row">
-              <div class="settings-label-block">
-                <span class="settings-label">Anthropic Claude</span>
-                <span class="settings-caption">Claude 3.5 Sonnet / Haiku API key</span>
-              </div>
-              <div style="display:flex; gap:6px;">
-                <input type="password" class="settings-input" id="key-anthropic" placeholder="sk-ant-..." style="width:200px;">
-                <button class="settings-btn secondary" onclick="validateKey('anthropic')">Test</button>
-                <button class="settings-btn" onclick="saveKey('anthropic')">Save</button>
-              </div>
-            </div>
-            <div class="settings-row">
-              <div class="settings-label-block">
-                <span class="settings-label">OpenAI</span>
-                <span class="settings-caption">GPT-4o / GPT-4o-mini API key</span>
-              </div>
-              <div style="display:flex; gap:6px;">
-                <input type="password" class="settings-input" id="key-openai" placeholder="sk-..." style="width:200px;">
-                <button class="settings-btn secondary" onclick="validateKey('openai')">Test</button>
-                <button class="settings-btn" onclick="saveKey('openai')">Save</button>
+
+            <!-- Privacy Policy Card -->
+            <div class="glass-card">
+              <strong style="color:#fff; font-size:14px;">Data Flow & Privacy Boundary</strong>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                <span style="font-size:12.5px; color:var(--text-secondary);">Execution Mode:</span>
+                <select class="glass-input" id="privacyModeSelect" onchange="savePrivacyMode()">
+                  <option value="local_only">Local Only (Zero Data Leak — Offline Inference)</option>
+                  <option value="cloud_allowed">Cloud Allowed (Enable Configured Cloud Fallbacks)</option>
+                </select>
               </div>
             </div>
+
+            <!-- Local Weights -->
+            <div class="glass-card">
+              <strong style="color:#fff; font-size:14px;">Local Neural Engine (llama.cpp)</strong>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                <div>
+                  <div style="font-size:13px; color:#fff;" id="localModelLabel">Gemma 2B IT (IQ3_M)</div>
+                  <div style="font-size:11px; color:var(--text-dim);" id="localModelSub">Resolving model status...</div>
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <button class="btn-send-pill" id="btnDownloadModel" onclick="downloadModel()">Pull Weights</button>
+                  <button class="btn-stop-pill" id="btnCancelDownload" onclick="cancelDownload()">Cancel</button>
+                </div>
+              </div>
+              <div id="downloadProgressContainer" style="display:none; margin-top:8px;">
+                <div style="height:4px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden;">
+                  <div id="downloadProgressFill" style="height:100%; width:0%; background:var(--accent-blue);"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cloud API Keys -->
+            <div class="glass-card">
+              <strong style="color:#fff; font-size:14px;">Cloud Provider Credentials (DPAPI Vault)</strong>
+              
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                <span style="font-size:12.5px; color:var(--text-secondary);">Google Gemini:</span>
+                <div style="display:flex; gap:6px;">
+                  <input type="password" class="glass-input" id="key-google" placeholder="AIzaSy..." style="width:180px;">
+                  <button class="btn-send-pill" style="padding:4px 10px;" onclick="validateKey('google')">Test</button>
+                  <button class="btn-send-pill" style="padding:4px 10px;" onclick="saveKey('google')">Save</button>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                <span style="font-size:12.5px; color:var(--text-secondary);">Anthropic Claude:</span>
+                <div style="display:flex; gap:6px;">
+                  <input type="password" class="glass-input" id="key-anthropic" placeholder="sk-ant-..." style="width:180px;">
+                  <button class="btn-send-pill" style="padding:4px 10px;" onclick="validateKey('anthropic')">Test</button>
+                  <button class="btn-send-pill" style="padding:4px 10px;" onclick="saveKey('anthropic')">Save</button>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+                <span style="font-size:12.5px; color:var(--text-secondary);">OpenAI API:</span>
+                <div style="display:flex; gap:6px;">
+                  <input type="password" class="glass-input" id="key-openai" placeholder="sk-..." style="width:180px;">
+                  <button class="btn-send-pill" style="padding:4px 10px;" onclick="validateKey('openai')">Test</button>
+                  <button class="btn-send-pill" style="padding:4px 10px;" onclick="saveKey('openai')">Save</button>
+                </div>
+              </div>
+            </div>
+
           </div>
+        </div>
 
-          <!-- Past Sessions -->
-          <div class="settings-section">
-            <div class="settings-section-title">Conversation Sessions</div>
-            <div class="session-list" id="sessionsListContainer">
-              <div style="color:#8a8a9a; font-size:12px;">Loading past sessions...</div>
-            </div>
-          </div>
+      </main>
+    </div>
+  </div>
 
+  <!-- ── Diagnostic Placement Quiz Modal ── -->
+  <div class="modal-backdrop" id="diagnosticQuizModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div>
+          <span style="font-size:11px; font-weight:700; color: #38bdf8;" id="quizTopicTag">DIAGNOSTIC PLACEMENT</span>
+          <h3 id="quizTopicTitle" style="color:#fff; font-size:16px; margin-top:2px;">Topic Diagnostic</h3>
+        </div>
+        <button onclick="closeDiagnosticModal()" style="background:transparent; border:none; color:var(--text-dim); cursor:pointer; font-size:18px;">✕</button>
+      </div>
+
+      <!-- Active Question View -->
+      <div class="modal-body" id="quizActiveBody">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span id="quizQuestionProgress" style="font-size:12px; color:var(--text-dim); font-weight:600;">Question 1 of 5</span>
+          <span id="quizDifficultyStars" style="font-size:12px; color:var(--amber);">Difficulty: ⭐⭐</span>
+        </div>
+        <div id="quizQuestionText" style="font-size:15px; font-weight:600; color:#fff; line-height:1.5;">
+          Question text loading...
+        </div>
+        <div id="quizOptionsList" style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+          <!-- Radio options -->
         </div>
       </div>
 
+      <!-- Result View -->
+      <div class="modal-body" id="quizResultBody" style="display:none;">
+        <div style="text-align:center; padding:10px 0;">
+          <div style="font-size:12px; color:var(--text-dim);">Assessed Baseline Mastery</div>
+          <div id="quizResultScore" style="font-size:36px; font-weight:800; color:var(--emerald); margin:4px 0;">67%</div>
+          <span id="quizResultTier" class="k12-badge-core" style="font-size:13px; padding:4px 12px;">Core Tier</span>
+        </div>
+        <div id="quizResultRec" style="background:rgba(255,255,255,0.04); padding:12px 14px; border-radius:var(--radius-md); font-size:12.5px; color:#94a3b8; line-height:1.5;">
+          Recommendation text...
+        </div>
+        <div style="font-size:13px; font-weight:700; color:#fff; margin-top:6px;">Question Breakdown:</div>
+        <div id="quizBreakdownList" style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto;">
+          <!-- Results list -->
+        </div>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="modal-footer" id="quizFooterActive">
+        <button class="btn-send-pill" style="background:transparent; border:1px solid var(--border-card); color:var(--text-secondary);" id="quizPrevBtn" onclick="prevQuizQuestion()">Previous</button>
+        <button class="btn-send-pill" id="quizNextBtn" onclick="nextQuizQuestion()">Next Question ›</button>
+      </div>
+      <div class="modal-footer" id="quizFooterResult" style="display:none;">
+        <button class="btn-send-pill" style="background:transparent; border:1px solid var(--border-card); color:var(--text-secondary);" onclick="closeDiagnosticModal()">Close</button>
+        <button class="btn-send-pill" id="quizStartTutorBtn" onclick="launchTutoringFromQuiz()">🚀 Start Adaptive Tutoring</button>
+      </div>
     </div>
   </div>
 
   <script src="qrc:/qtwebchannel/qwebchannel.js"></script>
   <script src="marked.min.js"></script>
   <script>
-    var bridge = null;
-    var isGenerating = false;
-    var currentTokens = [];
-    var allAgents = [];
-    var markdownDebounceTimer = null;
-    var renderRequested = false;
+    /* ── State & Bridge Setup ─────────────────────────────────────── */
+    let bridge = null;
+    let isGenerating = false;
+    let currentTokens = [];
+    let allAgents = [];
+    let currentCourseConcepts = [];
+    let selectedConceptForStudy = null;
+    let markdownDebounceTimer = null;
+    let renderRequested = false;
 
-    // ── QWebChannel setup ──
+    /* ── Live Clock Tracker ───────────────────────────────────────── */
+    function updateLiveClock() {
+      const now = new Date();
+      const dateOpts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+      const timeOpts = { hour: '2-digit', minute: '2-digit', hour12: true };
+      
+      const dateEl = document.getElementById("liveDateStr");
+      const timeEl = document.getElementById("liveTimeStr");
+      if (dateEl) {
+        const dStr = now.toLocaleDateString('en-GB', dateOpts);
+        if (dateEl.textContent !== dStr) dateEl.textContent = dStr;
+      }
+      if (timeEl) {
+        const tStr = now.toLocaleTimeString([], timeOpts);
+        if (timeEl.textContent !== tStr) timeEl.textContent = tStr;
+      }
+    }
+    setInterval(updateLiveClock, 5000);
+    updateLiveClock();
+
+    /* ── XSS & Markdown Engine ────────────────────────────────────── */
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function renderMarkdown(rawText) {
+      if (!rawText) return "";
+
+      const codeBlocks = [];
+      let text = rawText.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, function(match, lang, code) {
+        const id = "__CODE_SNIPPET_" + codeBlocks.length + "__";
+        codeBlocks.push({ lang: (lang || "code").toLowerCase(), code: code.trim() });
+        return id;
+      });
+
+      text = escapeHtml(text);
+      text = text.replace(/^### (.*$)/gim, "<h3>$1</h3>");
+      text = text.replace(/^## (.*$)/gim, "<h2>$1</h2>");
+      text = text.replace(/^# (.*$)/gim, "<h1>$1</h1>");
+      text = text.replace(/^\> (.*$)/gim, "<blockquote>$1</blockquote>");
+      text = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+      text = text.replace(/\*(.*?)\*/g, "<em>$1</em>");
+      text = text.replace(/`([^`]+)`/g, "<code class='inline'>$1</code>");
+      text = text.replace(/^\s*[\-\*]\s+(.*)$/gim, "<li>$1</li>");
+      text = text.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
+      text = text.replace(/<\/ul>\s*<ul>/g, "");
+      text = text.replace(/\n{2,}/g, "</p><p>");
+      text = text.replace(/\n/g, "<br>");
+      text = "<p>" + text + "</p>";
+      text = text.replace(/<p><\/p>/g, "");
+
+      codeBlocks.forEach(function(block, idx) {
+        const safeCode = escapeHtml(block.code);
+        const cardHtml =
+          '<div class="code-box">' +
+            '<div class="code-box-header">' +
+              '<span>' + block.lang.toUpperCase() + '</span>' +
+              '<button class="code-copy-btn" onclick="copyCode(this, ' + idx + ')">Copy</button>' +
+            '</div>' +
+            '<pre><code id="code-snippet-' + idx + '">' + safeCode + '</code></pre>' +
+          '</div>';
+        text = text.replace("__CODE_SNIPPET_" + idx + "__", cardHtml);
+      });
+
+      return text;
+    }
+
+    function copyCode(btn, idx) {
+      const el = document.getElementById("code-snippet-" + idx);
+      if (!el) return;
+      navigator.clipboard.writeText(el.innerText).then(function() {
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      });
+    }
+
+    /* ── WebChannel Initialization ────────────────────────────────── */
     new QWebChannel(qt.webChannelTransport, async function(channel) {
       bridge = channel.objects.bridge;
 
-      // Signal handlers
       bridge.token.connect(function(idx, text) {
         currentTokens.push(text);
-        
         if (!renderRequested) {
           renderRequested = true;
-          window.requestAnimationFrame(updateLastMessageRaw);
+          window.requestAnimationFrame(updateStreamViewRaw);
         }
-
         clearTimeout(markdownDebounceTimer);
-        markdownDebounceTimer = setTimeout(updateLastMessageMarkdown, 50);
+        markdownDebounceTimer = setTimeout(updateStreamView, 50);
       });
+
       bridge.done.connect(function() {
-        isGenerating = false;
-        updateSendButton();
         clearTimeout(markdownDebounceTimer);
-        updateLastMessageMarkdown();
-      });
-      bridge.error.connect(function(msg) {
-        addMessage('system', 'Error: ' + msg);
-        isGenerating = false;
-        updateSendButton();
-        clearTimeout(markdownDebounceTimer);
-        updateLastMessageMarkdown();
+        finishStream();
       });
 
-      // Initial loads
-      updateModelStatus();
+      bridge.error.connect(function(msg) {
+        clearTimeout(markdownDebounceTimer);
+        appendMsgRow("system", "Error: " + msg, "System");
+        finishStream();
+      });
+
+      await updateModelStatus();
       await populateAgentSelect();
+      await loadPrivacyMode();
+      await loadMiniSessions();
+      // Eagerly pre-render all views on initialization so section switching is instantaneous
+      await loadFullSessionsTab();
+      await loadAgentsTab();
+      await loadCoursesTab();
     });
 
-    // ── Tab Navigation (Audit #50 & #51) ──
-    function switchTab(tab, el) {
-      document.querySelectorAll('.sidebar-btn').forEach(function(b) {
-        b.classList.remove('active');
-      });
-      var target = el || (typeof event !== 'undefined' ? (event.currentTarget || event.target) : null);
-      if (target) {
-        target.classList.add('active');
-      }
-
-      document.querySelectorAll('.tab-view').forEach(function(v) {
-        v.classList.remove('active');
-      });
-
-      var selected = document.getElementById('tab-' + tab);
-      if (selected) {
-        selected.classList.add('active');
-      }
-
-      if (tab === 'chat') {
-        document.getElementById('userInput').focus();
-      } else if (tab === 'agents') {
-        loadAgentsTab();
-      } else if (tab === 'courses') {
-        loadCoursesTab();
-      } else if (tab === 'settings') {
-        loadSettingsTab();
-      }
-    }
-
-    // ── Agent Selector (Audit #52 & #53) ──
-    async function populateAgentSelect() {
-      if (!bridge || typeof bridge.get_agents !== 'function') return;
-      try {
-        var res = JSON.parse(await bridge.get_agents());
-        if (res && res.ok && res.agents) {
-          allAgents = res.agents;
-          var select = document.getElementById('agentSelect');
-          var cur = select.value;
-          select.innerHTML = '<option value="auto">🤖 Auto-detect</option>';
-          allAgents.forEach(function(a) {
-            var opt = document.createElement('option');
-            opt.value = a.name;
-            opt.textContent = '🤖 ' + a.name;
-            select.appendChild(opt);
-          });
-          select.value = cur || 'auto';
+    /* ── Navigation Tab Switching ─────────────────────────────────── */
+    function switchView(tabId, btn) {
+      // Batch all DOM mutations into a single rAF to guarantee one-frame atomic switch
+      requestAnimationFrame(() => {
+        document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+        if (btn) {
+          btn.classList.add("active");
+        } else {
+          const matchingBtn = document.querySelector(`.nav-item[onclick*="${tabId}"]`);
+          if (matchingBtn) matchingBtn.classList.add("active");
         }
-      } catch (e) {
-        console.error('Failed to load agents', e);
-      }
-    }
 
-    async function loadAgentsTab() {
-      await populateAgentSelect();
-      var container = document.getElementById('agentsContainer');
-      if (!allAgents || allAgents.length === 0) {
-        container.innerHTML = '<div style="color:#8a8a9a;">No agents registered.</div>';
-        return;
-      }
-      renderAgentCards(allAgents);
-    }
+        document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+        const selected = document.getElementById("tab-" + tabId);
+        if (selected) selected.classList.add("active");
 
-    function renderAgentCards(agents) {
-      var container = document.getElementById('agentsContainer');
-      container.innerHTML = '';
-      agents.forEach(function(a) {
-        var card = document.createElement('div');
-        card.className = 'agent-card';
-
-        var cmds = (a.commands || []).map(function(c) { return '<span class="agent-tag">' + c + '</span>'; }).join('');
-        var triggers = (a.triggers || []).slice(0, 3).map(function(t) { return '<span class="agent-tag">"' + t + '"</span>'; }).join('');
-
-        card.innerHTML =
-          '<div class="agent-card-header">' +
-            '<span class="agent-card-name">🤖 ' + a.name + '</span>' +
-            '<span class="agent-card-badge">Agent</span>' +
-          '</div>' +
-          '<div class="agent-card-desc">' + (a.description || 'Specialist assistant.') + '</div>' +
-          '<div class="agent-card-tags">' + cmds + triggers + '</div>' +
-          '<button class="agent-action-btn" onclick="activateAgent(\'' + a.name + '\')">Chat with Agent</button>';
-        container.appendChild(card);
+        if (tabId === "chat") {
+          const input = document.getElementById("userInput");
+          if (input) {
+            requestAnimationFrame(() => {
+              input.focus({ preventScroll: true });
+            });
+          }
+        } else if (tabId === "sessions") {
+          loadFullSessionsTab();
+        } else if (tabId === "courses") {
+          loadCoursesTab();
+        } else if (tabId === "agents") {
+          loadAgentsTab();
+        } else if (tabId === "settings") {
+          loadSettingsTab();
+        }
       });
     }
 
-    function filterAgents() {
-      var q = document.getElementById('agentSearchInput').value.toLowerCase().trim();
-      var filtered = allAgents.filter(function(a) {
-        return a.name.toLowerCase().includes(q) || (a.description && a.description.toLowerCase().includes(q));
-      });
-      renderAgentCards(filtered);
+    /* ── Quick Action Trigger ─────────────────────────────────────── */
+    function triggerQuickAction(action) {
+      const input = document.getElementById("userInput");
+      if (action === "explain") {
+        input.value = "Explain this concept in simple terms: ";
+      } else if (action === "solve") {
+        input.value = "Help me solve this step-by-step: ";
+      } else if (action === "plan") {
+        input.value = "Create a personalized learning roadmap for: ";
+      } else if (action === "notes") {
+        input.value = "Summarize the key points and core concepts of: ";
+      } else if (action === "practice") {
+        input.value = "Generate a practice exercise to test my knowledge on: ";
+      }
+      input.focus({ preventScroll: true });
     }
 
-    function activateAgent(agentName) {
-      var select = document.getElementById('agentSelect');
-      if (select) select.value = agentName;
-      switchTab('chat', document.querySelector('.sidebar-btn[title="Chat"]'));
-      var input = document.getElementById('userInput');
-      input.placeholder = 'Chatting with ' + agentName + '...';
-      input.focus();
+    function quickFillPrompt(text) {
+      const input = document.getElementById("userInput");
+      input.value = "Let's explore: " + text;
+      sendPrompt();
     }
 
-    // ── Courses Tab (Audit #55) ──
-    async function loadCoursesTab() {
-      if (!bridge || typeof bridge.get_curriculum_progress !== 'function') return;
-      try {
-        var res = JSON.parse(await bridge.get_curriculum_progress());
-        if (!res || !res.ok) return;
+    function toggleVoiceMock() {
+      const input = document.getElementById("userInput");
+      input.placeholder = "Listening... (Speak your question)";
+      setTimeout(() => {
+        input.placeholder = "Ask a question or explain what you'd like to learn...";
+      }, 3000);
+    }
 
-        var stats = res.stats || {};
-        document.getElementById('statTotal').textContent = stats.total || 0;
-        document.getElementById('statMastered').textContent = stats.mastered || 0;
-        document.getElementById('statInProgress').textContent = stats.in_progress || 0;
-        var pct = stats.mastery_pct ? Math.round(stats.mastery_pct) : 0;
-        document.getElementById('statPct').textContent = pct + '%';
-        document.getElementById('statProgressFill').style.width = pct + '%';
+    /* ── Chat Actions ─────────────────────────────────────────────── */
+    function autoResize(textarea) {
+      if (!textarea) return;
+      textarea.style.height = "24px";
+      const target = Math.min(Math.max(textarea.scrollHeight, 24), 110);
+      textarea.style.height = target + "px";
+    }
 
-        var list = document.getElementById('curriculumContainer');
-        list.innerHTML = '';
-        var concepts = res.concepts || [];
-        if (concepts.length === 0) {
-          list.innerHTML = '<div style="color:#8a8a9a;">No concepts tracked yet in LDG. Start learning in Tutor mode!</div>';
-          return;
+    function handleKey(e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendPrompt();
+      }
+    }
+
+    function sendPrompt() {
+      if (isGenerating) return;
+      const input = document.getElementById("userInput");
+      const text = input.value.trim();
+      if (!text) return;
+
+      const agentSelect = document.getElementById("agentSelect");
+      const agent = agentSelect ? agentSelect.value : "auto";
+
+      appendMsgRow("user", text);
+      input.value = "";
+      autoResize(input);
+
+      appendMsgRow("assistant", "", agent !== "auto" ? agent : "Gayatri Tutor");
+      isGenerating = true;
+      currentTokens = [];
+      updateComposeControls();
+
+      bridge.send_message(text, agent);
+    }
+
+    function stopStream() {
+      if (!isGenerating) return;
+      if (bridge && typeof bridge.cancel_generation === "function") {
+        bridge.cancel_generation();
+      }
+      finishStream();
+    }
+
+    function updateComposeControls() {
+      document.getElementById("sendBtn").disabled = isGenerating;
+      document.getElementById("stopBtn").style.display = isGenerating ? "inline-flex" : "none";
+    }
+
+    function appendMsgRow(role, text, tag) {
+      const container = document.getElementById("chatFeed");
+      const row = document.createElement("div");
+      row.className = "msg-row " + role;
+
+      let bubbleHtml = "";
+      if (role === "assistant" && tag) {
+        bubbleHtml += '<div class="msg-tag">🤖 ' + escapeHtml(tag) + '</div>';
+      }
+      bubbleHtml += '<div class="msg-text-content">' + (role === "assistant" ? renderMarkdown(text) : escapeHtml(text)) + '</div>';
+
+      row.innerHTML = '<div class="msg-bubble">' + bubbleHtml + '</div>';
+      container.appendChild(row);
+      container.scrollTop = container.scrollHeight;
+      return row;
+    }
+
+    function updateStreamViewRaw() {
+      renderRequested = false;
+      const container = document.getElementById("chatFeed");
+      if (!container) return;
+      const assistantRows = container.querySelectorAll(".msg-row.assistant");
+      const last = assistantRows[assistantRows.length - 1];
+      if (!last) return;
+
+      const content = last.querySelector(".msg-text-content");
+      if (content) {
+        content.textContent = currentTokens.join("");
+      }
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function updateStreamView() {
+      const container = document.getElementById("chatFeed");
+      const assistantRows = container.querySelectorAll(".msg-row.assistant");
+      const last = assistantRows[assistantRows.length - 1];
+      if (!last) return;
+
+      const content = last.querySelector(".msg-text-content");
+      if (content) {
+        content.innerHTML = renderMarkdown(currentTokens.join("")) + '<span class="stream-cursor"></span>';
+      }
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function finishStream() {
+      isGenerating = false;
+      updateComposeControls();
+      const container = document.getElementById("chatFeed");
+      const assistantRows = container.querySelectorAll(".msg-row.assistant");
+      const last = assistantRows[assistantRows.length - 1];
+      if (last) {
+        const content = last.querySelector(".msg-text-content");
+        if (content) {
+          content.innerHTML = renderMarkdown(currentTokens.join(""));
         }
-
-        concepts.forEach(function(c) {
-          var item = document.createElement('div');
-          item.className = 'concept-item';
-          var unlockedText = c.unlocked ? '<span style="color:#27c93f;">🔓 Unlocked</span>' : '<span style="color:#f5c542;">🔒 Locked</span>';
-          item.innerHTML =
-            '<div class="concept-info">' +
-              '<div class="concept-title">' + c.name + ' <span class="concept-subject">' + (c.subject || 'General') + '</span> ' + unlockedText + '</div>' +
-              '<div class="concept-desc">' + (c.description || 'Core concept') + '</div>' +
-            '</div>' +
-            '<div class="concept-mastery">' +
-              '<div class="progress-bar" style="width:80px;"><div class="progress-fill" style="width:' + c.mastery_pct + '%;"></div></div>' +
-              '<span>' + c.mastery_pct + '%</span>' +
-            '</div>' +
-            '<button class="concept-btn" onclick="learnConcept(\'' + c.name.replace(/'/g, "\\'") + '\')">Ask Tutor</button>';
-          list.appendChild(item);
-        });
-      } catch (e) {
-        console.error('Failed to load courses', e);
       }
-    }
-
-    function learnConcept(conceptName) {
-      activateAgent('Tutor');
-      var input = document.getElementById('userInput');
-      input.value = 'Can you teach me about ' + conceptName + '?';
-      send();
-    }
-
-    // ── Settings Tab ──
-    async function loadSettingsTab() {
-      if (!bridge) return;
-      try {
-        // Privacy mode
-        var mode = JSON.parse(await bridge.get_setting('privacy_mode'));
-        if (mode) {
-          document.getElementById('privacyModeSelect').value = mode;
-        }
-        // Local model
-        updateModelStatus();
-        // Sessions
-        loadSessionsList();
-      } catch (e) {
-        console.error('Failed to load settings', e);
-      }
-    }
-
-    function savePrivacyMode() {
-      var val = document.getElementById('privacyModeSelect').value;
-      if (bridge && typeof bridge.set_setting === 'function') {
-        bridge.set_setting('privacy_mode', JSON.stringify(val));
-      }
-    }
-
-    async function loadSessionsList() {
-      if (!bridge || typeof bridge.get_sessions !== 'function') return;
-      try {
-        var res = JSON.parse(await bridge.get_sessions());
-        var container = document.getElementById('sessionsListContainer');
-        container.innerHTML = '';
-        if (!res || !res.ok || !res.sessions || res.sessions.length === 0) {
-          container.innerHTML = '<div style="color:#8a8a9a;">No saved sessions yet.</div>';
-          return;
-        }
-        res.sessions.forEach(function(s) {
-          var row = document.createElement('div');
-          row.className = 'session-item';
-          row.innerHTML =
-            '<div>' +
-              '<div style="font-weight:600; color:#fff;">' + (s.title || s.id.substring(0, 16)) + '</div>' +
-              '<div style="font-size:10px; color:#8a8a9a;">' + s.message_count + ' messages • ' + (s.updated_at ? s.updated_at.substring(0, 10) : '') + '</div>' +
-            '</div>' +
-            '<div style="display:flex; gap:6px;">' +
-              '<button class="settings-btn secondary" style="padding:3px 8px; font-size:11px;" onclick="switchSession(\'' + s.id + '\')">Open</button>' +
-              '<button class="settings-btn secondary" style="padding:3px 8px; font-size:11px; color:#e94560;" onclick="deleteSession(\'' + s.id + '\')">Delete</button>' +
-            '</div>';
-          container.appendChild(row);
-        });
-      } catch (e) {
-        console.error('Failed to load sessions', e);
-      }
-    }
-
-    async function switchSession(sessId) {
-      if (bridge && typeof bridge.load_session_id === 'function') {
-        bridge.load_session_id(sessId);
-        switchTab('chat', document.querySelector('.sidebar-btn[title="Chat"]'));
-        var chat = document.getElementById('chat');
-        chat.innerHTML = '<div class="message system">Session restored (' + sessId.substring(0, 8) + '...).</div>';
-      }
-    }
-
-    function deleteSession(sessId) {
-      if (bridge && typeof bridge.delete_session === 'function') {
-        bridge.delete_session(sessId);
-        loadSessionsList();
-      }
+      loadMiniSessions();
     }
 
     function startNewChat() {
-      if (bridge && typeof bridge.new_chat === 'function') {
+      if (isGenerating) return;
+      if (bridge && typeof bridge.new_chat === "function") {
         bridge.new_chat();
-        var chat = document.getElementById('chat');
-        chat.innerHTML = '<div class="message system">New conversation started.</div>';
+        const chat = document.getElementById("chatFeed");
+        chat.innerHTML = `
+          <div class="system-announcement-card">
+            <div class="icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            </div>
+            <div>
+              <strong style="color:#fff;">Gayatri Tutor:</strong>
+              New session ready. What would you like to explore?
+            </div>
+          </div>`;
       }
     }
 
-    async function validateKey(providerKey) {
-      var input = document.getElementById('key-' + providerKey);
-      var keyVal = input ? input.value.trim() : '';
-      if (!keyVal) {
-        alert('Please enter an API key first.');
-        return;
-      }
-      if (bridge && typeof bridge.validate_provider_key === 'function') {
-        var res = JSON.parse(await bridge.validate_provider_key(providerKey, keyVal));
-        alert(res.valid ? 'Key is valid!' : 'Validation failed: ' + res.message);
+    /* ── Agents View ──────────────────────────────────────────────── */
+    async function populateAgentSelect() {
+      if (!bridge || typeof bridge.get_agents !== "function") return;
+      try {
+        const res = JSON.parse(await bridge.get_agents());
+        if (res && res.ok && res.agents) {
+          allAgents = res.agents;
+          const select = document.getElementById("agentSelect");
+          const cur = select.value;
+          select.innerHTML = '<option value="auto">Auto-detect Agent</option>';
+          allAgents.forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a.name;
+            opt.textContent = a.name;
+            select.appendChild(opt);
+          });
+          select.value = cur || "auto";
+        }
+      } catch (e) {
+        console.error("Agents fetch error:", e);
       }
     }
 
-    function saveKey(providerKey) {
-      var input = document.getElementById('key-' + providerKey);
-      var keyVal = input ? input.value.trim() : '';
-      if (!keyVal) {
-        alert('Please enter an API key to save.');
+    let agentsRendered = false;
+    async function loadAgentsTab() {
+      if (agentsRendered && allAgents && allAgents.length > 0) return;
+      await populateAgentSelect();
+      renderAgentsCards(allAgents);
+      agentsRendered = true;
+    }
+
+    function renderAgentsCards(agents) {
+      const container = document.getElementById("agentsContainer");
+      if (!agents || agents.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-dim);">No agents found.</div>';
         return;
       }
-      if (bridge && typeof bridge.save_provider_key === 'function') {
-        bridge.save_provider_key(providerKey, keyVal);
-        alert('Saved ' + providerKey + ' API key securely in Windows DPAPI vault.');
-        input.value = '';
+      let html = "";
+      agents.forEach(a => {
+        const tags = (a.commands || []).concat(a.triggers || []).slice(0, 3)
+          .map(t => '<span class="pill-status" style="font-size:10px; padding:2px 6px;">' + t + '</span>').join(" ");
+
+        html +=
+          '<div class="glass-card">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+              '<strong style="color:#fff; font-size:14px;">' + a.name + '</strong>' +
+              '<span style="font-size:11px; color:#38bdf8;">Active</span>' +
+            '</div>' +
+            '<p style="font-size:12px; color:var(--text-secondary); line-height:1.4;">' + (a.description || "Assistant specialist.") + '</p>' +
+            '<div>' + tags + '</div>' +
+            '<button class="btn-send-pill" style="align-self:flex-start; margin-top:4px;" onclick="activateAgent(\'' + a.name + '\')">Select Agent</button>' +
+          '</div>';
+      });
+      container.innerHTML = html;
+    }
+
+    function filterAgentsList() {
+      const q = document.getElementById("agentSearch").value.toLowerCase().trim();
+      const filtered = allAgents.filter(a =>
+        a.name.toLowerCase().includes(q) || (a.description && a.description.toLowerCase().includes(q))
+      );
+      renderAgentsCards(filtered);
+    }
+
+    function activateAgent(name) {
+      const select = document.getElementById("agentSelect");
+      if (select) select.value = name;
+      switchView("chat", document.querySelector('.nav-item'));
+      const input = document.getElementById("userInput");
+      input.placeholder = "Chatting with " + name + "...";
+      input.focus({ preventScroll: true });
+    }
+
+    /* ── Courses Tab & DAG Graph ──────────────────────────────────── */
+    let coursesRendered = false;
+    async function loadCoursesTab() {
+      if (coursesRendered && currentCourseConcepts && currentCourseConcepts.length > 0) return;
+      if (!bridge || typeof bridge.get_curriculum_progress !== "function") return;
+      try {
+        const res = JSON.parse(await bridge.get_curriculum_progress());
+        if (!res || !res.ok) return;
+
+        currentCourseConcepts = res.concepts || [];
+        renderDAGGraph(currentCourseConcepts);
+        coursesRendered = true;
+      } catch (e) {
+        console.error("Curriculum load error:", e);
       }
+    }
+
+    function renderDAGGraph(concepts) {
+      const svg = document.getElementById("dagSvg");
+      svg.innerHTML = "";
+      if (!concepts || concepts.length === 0) return;
+
+      const rankMap = {};
+      concepts.forEach(c => {
+        rankMap[c.id] = (c.prerequisites && c.prerequisites.length > 0) ? 1 : 0;
+      });
+      concepts.forEach(c => {
+        if (c.prerequisites) {
+          c.prerequisites.forEach(p => {
+            if (rankMap[p] !== undefined) rankMap[c.id] = Math.max(rankMap[c.id], rankMap[p] + 1);
+          });
+        }
+      });
+
+      const ranks = {};
+      concepts.forEach(c => {
+        const r = rankMap[c.id] || 0;
+        if (!ranks[r]) ranks[r] = [];
+        ranks[r].push(c);
+      });
+
+      const nodeCoords = {};
+      const colWidth = 220;
+      const rowHeight = 75;
+      const startX = 35;
+      const startY = 40;
+
+      concepts.forEach(c => {
+        const r = rankMap[c.id] || 0;
+        const idx = ranks[r].indexOf(c);
+        const x = startX + r * colWidth;
+        const y = startY + idx * rowHeight;
+        nodeCoords[c.id] = { x: x + 150, y: y + 24 };
+      });
+
+      // Arrow Marker
+      svg.innerHTML += `
+        <defs>
+          <marker id="dag-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#2563eb"/>
+          </marker>
+        </defs>
+      `;
+
+      // Edges
+      concepts.forEach(c => {
+        if (c.prerequisites) {
+          c.prerequisites.forEach(pId => {
+            const pCoord = nodeCoords[pId];
+            const cCoord = nodeCoords[c.id];
+            if (pCoord && cCoord) {
+              const startX = pCoord.x;
+              const startY = pCoord.y;
+              const endX = cCoord.x - 150;
+              const endY = cCoord.y;
+              const midX = (startX + endX) / 2;
+              const pathD = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
+              svg.innerHTML += `<path d="${pathD}" fill="none" stroke="#1e293b" stroke-width="2" marker-end="url(#dag-arrow)"/>`;
+            }
+          });
+        }
+      });
+
+      // Nodes
+      concepts.forEach(c => {
+        const r = rankMap[c.id] || 0;
+        const idx = ranks[r].indexOf(c);
+        const x = startX + r * colWidth;
+        const y = startY + idx * rowHeight;
+        
+        let strokeColor = "rgba(255,255,255,0.12)";
+        if (c.mastery >= 0.85) strokeColor = "#10b981";
+        else if (c.unlocked) strokeColor = "#f59e0b";
+
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("transform", `translate(${x}, ${y})`);
+        g.style.cursor = "pointer";
+        g.onclick = () => inspectConcept(c);
+
+        g.innerHTML = `
+          <rect width="150" height="48" rx="6" fill="#141824" stroke="${strokeColor}" stroke-width="1.5"/>
+          <text x="12" y="20" fill="#f8fafc" font-size="11.5" font-weight="600">${escapeHtml(c.name.substring(0, 16))}</text>
+          <text x="12" y="36" fill="#64748b" font-size="10">${escapeHtml(c.subject || "Topic")} • ${c.mastery_pct || 0}%</text>
+        `;
+        svg.appendChild(g);
+      });
+    }
+
+    function inspectConcept(c) {
+      selectedConceptForStudy = c;
+      document.getElementById("drawerTitle").textContent = c.name;
+      document.getElementById("drawerSubject").textContent = (c.subject || "GENERAL").toUpperCase();
+      document.getElementById("drawerDesc").textContent = c.description || "Core educational concept node.";
+      document.getElementById("drawerMasteryScore").textContent = (c.mastery_pct || 0) + "%";
+      document.getElementById("conceptDrawer").style.display = "flex";
+    }
+
+    function closeConceptDrawer() {
+      document.getElementById("conceptDrawer").style.display = "none";
+    }
+
+    function studySelectedConcept() {
+      if (!selectedConceptForStudy) return;
+      closeConceptDrawer();
+      switchView("chat", document.querySelector('.nav-item'));
+      const input = document.getElementById("userInput");
+      input.value = "Teach me about " + selectedConceptForStudy.name;
+      sendPrompt();
+    }
+
+    /* ── K-12 Curriculum & Placement Diagnostic Controller ───────── */
+    let currentKnowledgeSubtab = "k12";
+    let activeQuizQuestions = [];
+    let currentQuizIndex = 0;
+    let currentQuizTopicId = "";
+    let currentQuizTopicTitle = "";
+    let currentQuizCourseSubject = "";
+    let currentQuizAnswers = {};
+    let quizStartTime = 0;
+
+    function switchKnowledgeSubtab(subtab) {
+      currentKnowledgeSubtab = subtab;
+      const k12Btn = document.getElementById("subtab-k12-btn");
+      const ldgBtn = document.getElementById("subtab-ldg-btn");
+      const k12Panel = document.getElementById("k12CoursesPanel");
+      const ldgPanel = document.getElementById("ldgCanvasPanel");
+
+      if (subtab === "k12") {
+        if (k12Btn) {
+          k12Btn.style.background = "var(--accent-blue)";
+          k12Btn.style.color = "#fff";
+          k12Btn.style.border = "none";
+        }
+        if (ldgBtn) {
+          ldgBtn.style.background = "transparent";
+          ldgBtn.style.color = "var(--text-secondary)";
+          ldgBtn.style.border = "1px solid var(--border-card)";
+        }
+        if (k12Panel) k12Panel.style.display = "flex";
+        if (ldgPanel) ldgPanel.style.display = "none";
+        loadK12Courses();
+      } else {
+        if (ldgBtn) {
+          ldgBtn.style.background = "var(--accent-blue)";
+          ldgBtn.style.color = "#fff";
+          ldgBtn.style.border = "none";
+        }
+        if (k12Btn) {
+          k12Btn.style.background = "transparent";
+          k12Btn.style.color = "var(--text-secondary)";
+          k12Btn.style.border = "1px solid var(--border-card)";
+        }
+        if (k12Panel) k12Panel.style.display = "none";
+        if (ldgPanel) ldgPanel.style.display = "flex";
+        loadCoursesTab();
+      }
+    }
+
+    async function refreshCoursesData() {
+      coursesRendered = false;
+      if (currentKnowledgeSubtab === "k12") {
+        await loadK12Courses();
+      } else {
+        await loadCoursesTab();
+      }
+    }
+
+    async function loadK12Courses() {
+      if (!bridge || typeof bridge.get_k12_courses !== "function") return;
+      const listContainer = document.getElementById("k12CoursesList");
+      if (!listContainer) return;
+
+      try {
+        const rawCourses = await bridge.get_k12_courses();
+        const courses = JSON.parse(rawCourses || "[]");
+        if (!courses || courses.length === 0) {
+          listContainer.innerHTML = '<div style="color:var(--text-dim); padding:20px;">No K-12 curriculum modules loaded yet. Run ingest_course.py to add courses.</div>';
+          return;
+        }
+
+        let html = "";
+        for (const c of courses) {
+          const rawTopics = await bridge.get_k12_topics(c.id);
+          const topics = JSON.parse(rawTopics || "[]");
+
+          html += `
+            <div class="glass-card" style="padding:18px; display:flex; flex-direction:column; gap:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                  <span class="pill-status" style="font-size:10px; color:#38bdf8;">Grade ${c.grade} • ${escapeHtml(c.subject)}</span>
+                  <h3 style="color:#fff; font-size:16px; font-weight:700; margin-top:4px;">${escapeHtml(c.title)}</h3>
+                </div>
+                <span style="font-size:11px; color:var(--text-dim);">${topics.length} topics</span>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+                ${topics.map(t => {
+                  let badgeClass = "k12-badge-new";
+                  let tierLabel = "Not Started";
+                  if (t.tier === "Remedial") {
+                    badgeClass = "k12-badge-remedial";
+                    tierLabel = `Remedial (${Math.round((t.mastery_score||0)*100)}%)`;
+                  } else if (t.tier === "Core") {
+                    badgeClass = "k12-badge-core";
+                    tierLabel = `Core (${Math.round((t.mastery_score||0)*100)}%)`;
+                  } else if (t.tier === "Advanced") {
+                    badgeClass = "k12-badge-advanced";
+                    tierLabel = `Mastered (${Math.round((t.mastery_score||0)*100)}%)`;
+                  }
+
+                  return `
+                    <div style="background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
+                      <div style="display:flex; flex-direction:column; gap:3px;">
+                        <span style="color:#f1f5f9; font-size:13px; font-weight:600;">${escapeHtml(t.title)}</span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                          <span class="${badgeClass}">${tierLabel}</span>
+                          <span style="color:var(--text-dim); font-size:10.5px;">${t.question_count || 0} quiz items</span>
+                        </div>
+                      </div>
+                      <div style="display:flex; gap:6px;">
+                        <button class="btn-send-pill" style="font-size:11px; padding:3px 8px; background:rgba(37,99,235,0.2); border:1px solid var(--accent-blue); color:#fff;" onclick="openDiagnosticModal('${t.id}', '${escapeHtml(t.title)}', '${escapeHtml(c.subject)}')">🎯 Quiz</button>
+                        <button class="btn-send-pill" style="font-size:11px; padding:3px 8px; background:transparent; border:1px solid var(--border-card); color:var(--text-secondary);" onclick="startStudyForTopic('${escapeHtml(t.title)}', '${escapeHtml(c.subject)}')">💬 Tutor</button>
+                      </div>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            </div>
+          `;
+        }
+        listContainer.innerHTML = html;
+      } catch (err) {
+        console.error("loadK12Courses error:", err);
+      }
+    }
+
+    function startStudyForTopic(topicTitle, subject) {
+      switchView("chat", document.querySelector('.nav-item'));
+      const select = document.getElementById("agentSelect");
+      if (select) {
+        const subLower = (subject || "").toLowerCase();
+        let targetAgent = "Tutor";
+        if (subLower.includes("math")) targetAgent = "Elementary Math Tutor";
+        else if (subLower.includes("science")) targetAgent = "Biology Tutor";
+        for (let opt of select.options) {
+          if (opt.value.toLowerCase().includes(targetAgent.toLowerCase())) {
+            select.value = opt.value;
+            break;
+          }
+        }
+      }
+      const input = document.getElementById("userInput");
+      input.value = `Teach me about ${topicTitle} step-by-step`;
+      sendPrompt();
+    }
+
+    /* ── Diagnostic Quiz Modal Controller ────────────────────────── */
+    async function openDiagnosticModal(topicId, topicTitle, courseSubject) {
+      if (!bridge || typeof bridge.start_diagnostic_quiz !== "function") return;
+      currentQuizTopicId = topicId;
+      currentQuizTopicTitle = topicTitle;
+      currentQuizCourseSubject = courseSubject;
+      currentQuizIndex = 0;
+      currentQuizAnswers = {};
+      quizStartTime = Date.now();
+
+      try {
+        const rawQuiz = await bridge.start_diagnostic_quiz(topicId);
+        activeQuizQuestions = JSON.parse(rawQuiz || "[]");
+
+        if (!activeQuizQuestions || activeQuizQuestions.length === 0) {
+          alert("No diagnostic questions found for topic: " + topicTitle);
+          return;
+        }
+
+        document.getElementById("quizTopicTag").textContent = (courseSubject || "CURRICULUM").toUpperCase() + " PLACEMENT TEST";
+        document.getElementById("quizTopicTitle").textContent = topicTitle;
+
+        document.getElementById("quizActiveBody").style.display = "flex";
+        document.getElementById("quizResultBody").style.display = "none";
+        document.getElementById("quizFooterActive").style.display = "flex";
+        document.getElementById("quizFooterResult").style.display = "none";
+
+        renderQuizQuestion();
+        document.getElementById("diagnosticQuizModal").classList.add("active");
+      } catch (err) {
+        console.error("openDiagnosticModal error:", err);
+      }
+    }
+
+    function closeDiagnosticModal() {
+      document.getElementById("diagnosticQuizModal").classList.remove("active");
+    }
+
+    function renderQuizQuestion() {
+      const q = activeQuizQuestions[currentQuizIndex];
+      if (!q) return;
+
+      document.getElementById("quizQuestionProgress").textContent = `Question ${currentQuizIndex + 1} of ${activeQuizQuestions.length}`;
+      const stars = "⭐".repeat(q.difficulty || 1);
+      document.getElementById("quizDifficultyStars").textContent = `Difficulty: ${stars}`;
+      document.getElementById("quizQuestionText").textContent = q.question;
+
+      const optsContainer = document.getElementById("quizOptionsList");
+      optsContainer.innerHTML = "";
+
+      const currentSelected = currentQuizAnswers[currentQuizIndex];
+
+      (q.options || []).forEach((opt, idx) => {
+        const card = document.createElement("div");
+        card.className = "quiz-option-card" + (currentSelected === idx ? " selected" : "");
+        card.onclick = () => selectQuizOption(idx);
+        card.innerHTML = `
+          <div style="width:18px; height:18px; border-radius:50%; border:2px solid ${currentSelected === idx ? 'var(--accent-blue)' : 'var(--text-dim)'}; display:flex; align-items:center; justify-content:center;">
+            ${currentSelected === idx ? '<div style="width:8px; height:8px; border-radius:50%; background:var(--accent-blue);"></div>' : ''}
+          </div>
+          <span style="font-size:13.5px; color:#f1f5f9;">${escapeHtml(opt)}</span>
+        `;
+        optsContainer.appendChild(card);
+      });
+
+      document.getElementById("quizPrevBtn").style.visibility = currentQuizIndex > 0 ? "visible" : "hidden";
+      const nextBtn = document.getElementById("quizNextBtn");
+      if (currentQuizIndex === activeQuizQuestions.length - 1) {
+        nextBtn.textContent = "Submit Placement Quiz ✓";
+        nextBtn.style.background = "var(--emerald)";
+      } else {
+        nextBtn.textContent = "Next Question ›";
+        nextBtn.style.background = "var(--accent-blue)";
+      }
+    }
+
+    function selectQuizOption(idx) {
+      currentQuizAnswers[currentQuizIndex] = idx;
+      renderQuizQuestion();
+    }
+
+    function prevQuizQuestion() {
+      if (currentQuizIndex > 0) {
+        currentQuizIndex--;
+        renderQuizQuestion();
+      }
+    }
+
+    function nextQuizQuestion() {
+      if (currentQuizAnswers[currentQuizIndex] === undefined) {
+        alert("Please select an option before continuing.");
+        return;
+      }
+      if (currentQuizIndex < activeQuizQuestions.length - 1) {
+        currentQuizIndex++;
+        renderQuizQuestion();
+      } else {
+        submitDiagnosticQuiz();
+      }
+    }
+
+    async function submitDiagnosticQuiz() {
+      const elapsedMs = Date.now() - quizStartTime;
+      const perQuestionTime = Math.round(elapsedMs / (activeQuizQuestions.length || 1));
+
+      const submissions = activeQuizQuestions.map((q, idx) => ({
+        question_id: q.id,
+        selected_option: currentQuizAnswers[idx] !== undefined ? currentQuizAnswers[idx] : 0,
+        response_time_ms: perQuestionTime,
+      }));
+
+      const payload = {
+        topic_id: currentQuizTopicId,
+        submissions: submissions,
+      };
+
+      try {
+        const rawResult = await bridge.submit_diagnostic_quiz(JSON.stringify(payload));
+        const res = JSON.parse(rawResult || "{}");
+
+        document.getElementById("quizActiveBody").style.display = "none";
+        document.getElementById("quizResultBody").style.display = "flex";
+        document.getElementById("quizFooterActive").style.display = "none";
+        document.getElementById("quizFooterResult").style.display = "flex";
+
+        const pct = Math.round((res.initial_mastery || 0) * 100);
+        document.getElementById("quizResultScore").textContent = pct + "%";
+
+        const tierEl = document.getElementById("quizResultTier");
+        tierEl.textContent = (res.mastery_tier || "Core") + " Tier";
+        tierEl.className = res.mastery_tier === "Remedial" ? "k12-badge-remedial" : (res.mastery_tier === "Advanced" ? "k12-badge-advanced" : "k12-badge-core");
+
+        document.getElementById("quizResultRec").textContent = res.recommendation || "Diagnostic assessment completed.";
+
+        const breakdown = document.getElementById("quizBreakdownList");
+        breakdown.innerHTML = "";
+        (res.question_results || []).forEach(r => {
+          const item = document.createElement("div");
+          item.style.cssText = "background:rgba(0,0,0,0.25); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:8px 12px; font-size:12px;";
+          const statusColor = r.is_correct ? "var(--emerald)" : "var(--rose)";
+          const statusText = r.is_correct ? "✓ Correct" : "✕ Incorrect";
+          item.innerHTML = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <span style="color:#f8fafc; font-weight:600;">${escapeHtml(r.question)}</span>
+              <strong style="color:${statusColor};">${statusText}</strong>
+            </div>
+            <div style="color:var(--text-dim); font-size:11px; margin-top:2px;">${escapeHtml(r.explanation || "")}</div>
+          `;
+          breakdown.appendChild(item);
+        });
+
+        loadK12Courses();
+      } catch (err) {
+        console.error("submitDiagnosticQuiz error:", err);
+      }
+    }
+
+    function launchTutoringFromQuiz() {
+      closeDiagnosticModal();
+      startStudyForTopic(currentQuizTopicTitle, currentQuizCourseSubject);
+    }
+
+    /* ── Sessions ─────────────────────────────────────────────────── */
+    async function loadMiniSessions() {
+      if (!bridge || typeof bridge.get_sessions !== "function") return;
+      try {
+        const res = JSON.parse(await bridge.get_sessions());
+        if (!res || !res.ok || !res.sessions) return;
+        const container = document.getElementById("miniSessionsList");
+        if (res.sessions.length > 0) {
+          container.innerHTML = "";
+          res.sessions.slice(0, 5).forEach((s, idx) => {
+            const colors = ["blue", "green", "amber", "purple", "rose"];
+            const icons = [
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>'
+            ];
+            const item = document.createElement("div");
+            item.className = "session-mini-item";
+            item.onclick = () => openSession(s.id);
+            item.innerHTML = `
+              <div class="session-mini-icon ${colors[idx % colors.length]}">${icons[idx % icons.length]}</div>
+              <div class="session-mini-info">
+                <div class="session-mini-name">${escapeHtml(s.title || s.id.substring(0, 18))}</div>
+                <div class="session-mini-time">${s.message_count || 0} msgs • ${s.updated_at ? s.updated_at.substring(0, 10) : ''}</div>
+              </div>
+              <span class="session-mini-arrow">›</span>
+            `;
+            container.appendChild(item);
+          });
+        }
+      } catch(e) {}
+    }
+
+    async function loadFullSessionsTab() {
+      if (!bridge || typeof bridge.get_sessions !== "function") return;
+      try {
+        const res = JSON.parse(await bridge.get_sessions());
+        const container = document.getElementById("fullSessionsContainer");
+        if (!res || !res.ok || !res.sessions || res.sessions.length === 0) {
+          container.innerHTML = '<div style="color: var(--text-dim); font-size: 12px;">No sessions stored yet.</div>';
+          return;
+        }
+        let html = "";
+        res.sessions.forEach(s => {
+          html += `
+            <div class="glass-card" style="flex-direction:row; align-items:center; justify-content:space-between;">
+              <div>
+                <div style="font-size:13.5px; font-weight:600; color:#fff;">${escapeHtml(s.title || s.id.substring(0, 20))}</div>
+                <div style="font-size:11px; color:var(--text-dim);">${s.message_count || 0} messages • ${s.updated_at ? s.updated_at.substring(0, 10) : ''}</div>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button class="btn-send-pill" style="padding:4px 10px;" onclick="openSession('${s.id}')">Open</button>
+                <button class="btn-stop-pill" style="display:inline-flex; padding:4px 10px;" onclick="deleteSessionId('${s.id}')">Delete</button>
+              </div>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+      } catch (e) {}
+    }
+
+    async function openSession(id) {
+      if (bridge && typeof bridge.load_session_id === "function") {
+        bridge.load_session_id(id);
+        switchView("chat", document.querySelector('.nav-item'));
+        const chat = document.getElementById("chatFeed");
+        chat.innerHTML = `<div class="system-announcement-card"><div>Restored session (${id.substring(0, 8)}...).</div></div>`;
+      }
+    }
+
+    function deleteSessionId(id) {
+      if (bridge && typeof bridge.delete_session === "function") {
+        bridge.delete_session(id);
+        loadFullSessionsTab();
+        loadMiniSessions();
+      }
+    }
+
+    /* ── Settings ─────────────────────────────────────────────────── */
+    async function loadPrivacyMode() {
+      if (!bridge || typeof bridge.get_setting !== "function") return;
+      try {
+        const mode = JSON.parse(await bridge.get_setting("privacy_mode"));
+        const select = document.getElementById("privacyModeSelect");
+        if (select && mode) select.value = mode;
+      } catch(e) {}
+    }
+
+    function savePrivacyMode() {
+      const select = document.getElementById("privacyModeSelect");
+      if (bridge && typeof bridge.set_setting === "function") {
+        bridge.set_setting("privacy_mode", JSON.stringify(select.value));
+      }
+    }
+
+    async function validateKey(provider) {
+      const input = document.getElementById("key-" + provider);
+      const val = input ? input.value.trim() : "";
+      if (!val) { alert("Please enter a key first."); return; }
+      if (bridge && typeof bridge.validate_provider_key === "function") {
+        const res = JSON.parse(await bridge.validate_provider_key(provider, val));
+        alert(res.valid ? "Key valid!" : "Validation failed: " + res.message);
+      }
+    }
+
+    function saveKey(provider) {
+      const input = document.getElementById("key-" + provider);
+      const val = input ? input.value.trim() : "";
+      if (!val) { alert("Please enter an API key to save."); return; }
+      if (bridge && typeof bridge.save_provider_key === "function") {
+        bridge.save_provider_key(provider, val);
+        alert("Saved key securely in DPAPI vault.");
+        input.value = "";
+      }
+    }
+
+    function loadSettingsTab() {
+      loadPrivacyMode();
+      updateModelStatus();
+    }
+
+    /* ── Model Status ─────────────────────────────────────────────── */
+    async function updateModelStatus() {
+      try {
+        const status = JSON.parse(await bridge.get_local_model_status());
+        const pill = document.getElementById("modelStatusPill");
+        const dot = document.getElementById("statusDot");
+        const text = document.getElementById("statusText");
+        const sidebarSize = document.getElementById("sidebarModelSize");
+
+        if (status.installed) {
+          pill.className = "pill-status";
+          const size = (status.size_mb / 1024).toFixed(1) + " GB";
+          text.textContent = "Local Ready (" + size + ")";
+          if (sidebarSize) sidebarSize.textContent = size;
+        } else {
+          pill.className = "pill-status warning";
+          text.textContent = "Weights Not Found";
+          if (sidebarSize) sidebarSize.textContent = "Missing";
+        }
+      } catch(e) {}
     }
 
     function downloadModel() {
-      if (bridge && typeof bridge.download_model === 'function') {
+      if (bridge && typeof bridge.download_model === "function") {
         bridge.download_model();
-        document.getElementById('downloadProgressContainer').style.display = 'block';
-        document.getElementById('btnCancelDownload').style.display = 'inline-block';
+        document.getElementById("downloadProgressContainer").style.display = "block";
+        document.getElementById("btnCancelDownload").style.display = "inline-flex";
       }
     }
 
     function cancelDownload() {
-      if (bridge && typeof bridge.cancel_model_download === 'function') {
+      if (bridge && typeof bridge.cancel_model_download === "function") {
         bridge.cancel_model_download();
-        document.getElementById('downloadProgressContainer').style.display = 'none';
-        document.getElementById('btnCancelDownload').style.display = 'none';
+        document.getElementById("downloadProgressContainer").style.display = "none";
+        document.getElementById("btnCancelDownload").style.display = "none";
       }
     }
 
-    // ── Model status ──
-    async function updateModelStatus() {
-      try {
-        var status = JSON.parse(await bridge.get_local_model_status());
-        var dot = document.getElementById('statusDot');
-        var text = document.getElementById('statusText');
-        var detail = document.getElementById('localModelDetail');
+    /* ── Compatibility Aliases for Legacy Handlers ────────────────── */
+    function send() { sendPrompt(); }
+    function addMessage(role, text, tag) { return appendMsgRow(role, text, tag); }
+    function cancelGeneration() { stopStream(); }
+    function updateSendButton() { updateComposeControls(); }
 
-        if (status.installed) {
-          dot.className = 'status-dot ready';
-          var size = (status.size_mb / 1024).toFixed(1) + ' GB';
-          text.textContent = 'Ready — ' + size;
-          if (detail) detail.textContent = 'Model installed and ready (' + size + ') at ' + (status.path || 'local storage');
-        } else {
-          dot.className = 'status-dot error';
-          text.textContent = 'Model not found';
-          if (detail) detail.textContent = 'Model file not installed: ' + (status.message || 'Needs download');
-        }
-      } catch(e) { console.error('Model status check failed:', e); }
-    }
-
-    // ── Chat functions ──
-    function send() {
-      if (isGenerating) return;
-      if (!bridge) {
-        addMessage('system', 'Connection initializing. Please wait a moment...');
-        return;
-      }
-      var input = document.getElementById('userInput');
-      var msg = input.value.trim();
-      if (!msg) return;
-
-      var agentSelect = document.getElementById('agentSelect');
-      var selectedAgent = agentSelect ? agentSelect.value : 'auto';
-
-      addMessage('user', msg);
-      addMessage('assistant', '', selectedAgent !== 'auto' ? selectedAgent : null);
-      input.value = '';
-      isGenerating = true;
-      updateSendButton();
-      currentTokens = [];
-
-      bridge.send_message(msg, selectedAgent);
-    }
-
-    function addMessage(role, text, agentName) {
-      var chat = document.getElementById('chat');
-      var div = document.createElement('div');
-      div.className = 'message ' + role;
-
-      if (agentName) {
-        var tag = document.createElement('div');
-        tag.className = 'message-agent-tag';
-        tag.textContent = '🤖 ' + agentName;
-        div.appendChild(tag);
-      }
-
-      var content = document.createElement('div');
-      content.className = 'message-content';
-      
-      if (typeof marked !== 'undefined' && role !== 'system') {
-        content.innerHTML = marked.parse(text);
-      } else {
-        content.textContent = text;
-      }
-      div.appendChild(content);
-
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
-      return div;
-    }
-
-    function updateLastMessageRaw() {
-      renderRequested = false;
-      var chat = document.getElementById('chat');
-      var msgs = chat.querySelectorAll('.message.assistant');
-      var last = msgs[msgs.length - 1];
-      if (!last) {
-        addMessage('assistant', '');
-        last = chat.querySelector('.message.assistant:last-child');
-      }
-      var content = last.querySelector('.message-content');
-      if (content) {
-        content.textContent = currentTokens.join('');
-      }
-      chat.scrollTop = chat.scrollHeight;
-    }
-
-    function updateLastMessageMarkdown() {
-      var chat = document.getElementById('chat');
-      var msgs = chat.querySelectorAll('.message.assistant');
-      var last = msgs[msgs.length - 1];
-      if (!last) return;
-      var content = last.querySelector('.message-content');
-      if (content && typeof marked !== 'undefined') {
-        content.innerHTML = marked.parse(currentTokens.join(''));
-      } else if (content) {
-        content.textContent = currentTokens.join('');
-      }
-      chat.scrollTop = chat.scrollHeight;
-    }
-
-    function updateSendButton() {
-      var sendBtn = document.getElementById('sendBtn');
-      var stopBtn = document.getElementById('stopBtn');
-      if (isGenerating) {
-          sendBtn.style.display = 'none';
-          stopBtn.style.display = 'inline-block';
-      } else {
-          sendBtn.style.display = 'inline-block';
-          stopBtn.style.display = 'none';
-      }
-    }
-    
-    function cancelGeneration() {
-      if (!isGenerating || !bridge) return;
-      if (typeof bridge.cancel_generation === 'function') {
-        bridge.cancel_generation();
-        // Don't set isGenerating = false immediately, let the bridge.error/done signal handle it safely
-      }
-    }
-
-    // ── Window Controls (Frameless UI) ──
+    /* ── Window Controls (Frameless UI) ───────────────────────────── */
     function minimizeWindow() {
-      if (bridge && typeof bridge.minimize_window === 'function') {
-        bridge.minimize_window();
-      }
+      if (bridge && typeof bridge.minimize_window === "function") bridge.minimize_window();
     }
-
     function maximizeWindow() {
-      if (bridge && typeof bridge.maximize_window === 'function') {
-        bridge.maximize_window();
-      }
+      if (bridge && typeof bridge.maximize_window === "function") bridge.maximize_window();
     }
-
     function closeWindow() {
-      if (bridge && typeof bridge.close_window === 'function') {
-        bridge.close_window();
-      }
+      if (bridge && typeof bridge.close_window === "function") bridge.close_window();
     }
-
-    // Focus input on load
-    document.getElementById('userInput').focus();
   </script>
 </body>
 </html>

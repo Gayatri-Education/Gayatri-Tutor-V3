@@ -9,14 +9,39 @@ This project was built from the ground up to demonstrate how specialized AI agen
 
 ---
 
+## ✨ Preview
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="Gayatri Tutor V3 — Chat Interface" width="100%" />
+</p>
+
+> *Gayatri Tutor V3 running in Local Mode — atmospheric dark UI with the Socratic tutoring engine active.*
+
+---
+
 ## 🌟 What This Project Does
 
-- **Intelligent Orchestration:** A central local LLM routes user requests to specialized AI agents (e.g., Code Reviewer, Math Tutor, General Assistant) based on context and need.
-- **Privacy Controlled by Design:** The app supports precise data boundary control:
-  - **Local-Only Mode (Default):** All primary inference happens entirely on your local machine using quantized GGUF models. Conversation content stays on-device except for explicitly invoked local dependencies.
+- **54 Specialized AI Agents:** An ecosystem of agents orchestrated locally:
+  - **K-12 STEM Specialists:** Elementary Math, Algebra, Geometry, Physics, Chemistry, Biology, Environmental Science.
+  - **Humanities & Language:** History & Civics, Geography, English Grammar Coach, Reading Comprehension, Creative Writing.
+  - **Grade-Band Coaches:** Primary School (Grades 1–5), Middle School (Grades 6–8), High School & Board Exam Coach (Grades 9–12).
+  - **Pedagogical Support:** Socratic Questioner, Progressive Hint Giver, Doubt Buster, Formula & Theorem Companion, Quiz Master, Study Habit Coach.
+  - **Enterprise & Productivity Agents:** Orchestrator, Research, Translation, Document, Summarization, and more.
+- **Adaptive K-12 Learning Engine & Knowledge Explorer:**
+  - **Course-as-Markdown Ingestion:** Authors create curricula in standard `.md` files with YAML frontmatter, anchored topics `{#topic-id}`, `level:N` paragraphs, and embedded machine-parseable ```` ```quiz ```` blocks.
+  - **Diagnostic Placement Testing:** Automated 5–8 question placement test measuring baseline ability across difficulty levels 1–5.
+  - **Bayesian Knowledge Tracing (BKT):** Continuous difficulty-weighted mastery updates ($M \in [0.0, 1.0]$) dynamically driving 3-tier pedagogical scaffolding (`Remedial`, `Core`, `Advanced`).
+  - **Interactive Desktop UI Course Explorer & Placement Modal:** Browse courses in the Knowledge tab, view visual topic mastery pills, and take interactive diagnostic quizzes directly in the desktop app with 1-click launch into personalized Socratic tutoring.
+- **Curriculum Authoring & Parental Reporting CLI:**
+  - **Course Ingestion CLI (`scripts/ingest_course.py`):** Authoring tool with `--validate-only` schema linting and continuous `--watch` filesystem reload.
+  - **Nightly Mastery Reports (`scripts/nightly_mastery_report.py`):** Automated progress rollup generating CSV and JSON reports with accuracy trends, tier distributions, and response times for teachers and parents.
+- **Performance & Central Inference Service:**
+  - Integrated inference cancellation via desktop UI Stop button (`bridge.cancel_generation()`).
+  - 50ms rAF debounced markdown streaming for smooth typing and immediate text display.
+- **Privacy Controlled by Design:**
+  - **Local-Only Mode (Default):** All primary inference happens entirely on your local machine using quantized GGUF models.
   - **Cloud-Allowed Mode:** User-approved provider calls may transmit submitted content according to the provider's policy.
-- **Interactive Tutoring Engine:** Tracks student mastery over concepts using a Learning Dependency Graph and adapts responses dynamically to foster actual learning rather than just providing answers.
-- **Beautiful & Native Desktop UI:** Built using PySide6 and a modern WebEngine front-end, bridging smooth web technologies with robust Python backend logic.
+- **Native Desktop UI:** Built using PySide6 and a modern WebEngine front-end with SwiftShader software rendering to eliminate GPU artifacts.
 
 ---
 
@@ -51,6 +76,35 @@ run_gayatri.bat
 
 ---
 
+## 📚 K-12 Curriculum & Mastery CLI Tools
+
+### Ingesting & Validating Courses (`scripts/ingest_course.py`)
+Authors can drop `.md` curriculum files into `content/courses/` and ingest or validate them using the CLI:
+
+```bash
+# Validate a single course file without writing to DB
+python scripts/ingest_course.py content/courses/math_g5_fractions.md --validate-only
+
+# Ingest all courses in a directory into SQLite
+python scripts/ingest_course.py content/courses/
+
+# Ingest and continuously watch directory for file changes
+python scripts/ingest_course.py content/courses/ --watch
+```
+
+### Nightly Mastery & Progress Report (`scripts/nightly_mastery_report.py`)
+Generate teacher and parent progress rollups with student accuracy %, BKT mastery tiers (`Remedial`, `Core`, `Advanced`), and response times:
+
+```bash
+# Generate report for all students (exports both CSV and JSON to data/reports/)
+python scripts/nightly_mastery_report.py
+
+# Generate report for a specific student ID
+python scripts/nightly_mastery_report.py --student student-1 --output-dir data/reports/
+```
+
+---
+
 ## 🧠 Model Training & Integration
 
 The intelligence of Gayatri Tutor is powered by a custom fine-tuned model. The repository includes the complete pipeline used to generate data and fine-tune the model.
@@ -71,6 +125,27 @@ The intelligence of Gayatri Tutor is powered by a custom fine-tuned model. The r
 | **Database & Persistence**| SQLite + sqlite-vec |
 | **Security & Secrets** | Windows DPAPI |
 | **Testing & Quality** | `pytest`, `pytest-qt`, `ruff` |
+| **UI Rendering** | SwiftShader (software renderer) — eliminates GPU texture corruption on Windows DWM |
+
+---
+
+## 🖥️ UI & Rendering Stability
+
+Gayatri Tutor V3 runs on a **frameless PySide6 window** with a Chromium WebEngine front-end. On Windows, the Chromium GPU process can promote compositor surfaces to hardware overlays via MPO (Multi-Plane Overlay), which causes severe texture corruption (black checkerboard artifacts) in frameless windows without a native titlebar.
+
+This is fully resolved by forcing **SwiftShader** software rendering via Chromium flags set before any Qt import in `app/main.py`:
+
+```python
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+    "--disable-gpu "
+    "--in-process-gpu "
+    "--disable-features=UseSkiaRenderer "
+    "--disable-gpu-compositing "
+    ...
+)
+```
+
+The result is a pixel-perfect, flicker-free UI at all times — with zero GPU texture corruption on any Windows version.
 
 ---
 
