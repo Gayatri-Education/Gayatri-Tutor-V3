@@ -69,6 +69,35 @@ run_gayatri.bat
 
 ---
 
+## 📚 K-12 Curriculum & Mastery CLI Tools
+
+### Ingesting & Validating Courses (`scripts/ingest_course.py`)
+Authors can drop `.md` curriculum files into `content/courses/` and ingest or validate them using the CLI:
+
+```bash
+# Validate a single course file without writing to DB
+python scripts/ingest_course.py content/courses/math_g5_fractions.md --validate-only
+
+# Ingest all courses in a directory into SQLite
+python scripts/ingest_course.py content/courses/
+
+# Ingest and continuously watch directory for file changes
+python scripts/ingest_course.py content/courses/ --watch
+```
+
+### Nightly Mastery & Progress Report (`scripts/nightly_mastery_report.py`)
+Generate teacher and parent progress rollups with student accuracy %, BKT mastery tiers (`Remedial`, `Core`, `Advanced`), and response times:
+
+```bash
+# Generate report for all students (exports both CSV and JSON to data/reports/)
+python scripts/nightly_mastery_report.py
+
+# Generate report for a specific student ID
+python scripts/nightly_mastery_report.py --student student-1 --output-dir data/reports/
+```
+
+---
+
 ## 🧠 Model Training & Integration
 
 The intelligence of Gayatri Tutor is powered by a custom fine-tuned model. The repository includes the complete pipeline used to generate data and fine-tune the model.

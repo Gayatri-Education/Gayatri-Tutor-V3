@@ -198,3 +198,118 @@ def test_adaptive_prompt_tiers():
     repo.set_mastery("st-adv", "topic-1", mastery_score=0.85)
     p_adv = engine.build_adaptive_system_prompt("Base", "st-adv", "topic-1")
     assert "Mastery & Extension" in p_adv
+
+
+def test_cli_ingest_course_validation(tmp_path):
+    """Verify scripts/ingest_course.py validation logic and ingestion."""
+    from scripts.ingest_course import validate_course, ingest_file
+
+    # 1. Invalid course (missing subject, bad grade, no topics)
+    bad_course = ParsedCourse(
+        course_id="bad-1",
+        title="Bad",
+        subject="",
+        grade=15,
+        topics=[],
+    )
+    errors = validate_course(bad_course)
+    assert len(errors) >= 3
+
+    # 2. Valid course file
+    valid_md = """---
+course_id: test-cli-course
+subject: Mathematics
+grade: 6
+title: "CLI Ingest Test Course"
+---
+# Fractions {#cli-fractions}
+Introduction to fractions.
+
+```quiz
+type: mcq
+difficulty: 2
+question: What is 1/2 + 1/2?
+options:
+  - "1/4"
+  - "1"
+  - "2"
+answer: 1
+explanation: Half plus half equals one.
+```
+"""
+    test_file = tmp_path / "test_course.md"
+    test_file.write_text(valid_md, encoding="utf-8")
+
+    # Ingest in validate-only mode
+    assert ingest_file(test_file, validate_only=True) is True
+
+    # Ingest to DB
+    assert ingest_file(test_file, validate_only=False) is True
+
+
+def test_nightly_mastery_report_generation(tmp_path):
+    """Verify scripts/nightly_mastery_report.py aggregates stats and outputs CSV/JSON."""
+    from scripts.nightly_mastery_report import generate_mastery_summary, export_reports
+    from core.tutor.course_repo import course_repo
+
+    # Seed test student mastery and diagnostic attempt
+    course_repo.set_mastery("test_student_report", "cli-fractions", mastery_score=0.85)
+    course_repo.record_attempt(
+        student_id="test_student_report",
+        topic_id="cli-fractions",
+        question_id="q-cli-1",
+        is_correct=True,
+        response_time_ms=1200,
+    )
+
+    summary = generate_mastery_summary("test_student_report")
+    assert summary["total_records"] >= 1
+    assert "test_student_report" in summary["students"]
+
+    student_data = summary["students"]["test_student_report"]
+    assert student_data["topics_mastered"] >= 1
+    assert student_data["total_attempts"] >= 1
+
+    # Export to temp directory
+    json_path, csv_path = export_reports(summary, tmp_path)
+    assert json_path.exists()
+    assert csv_path.exists()
+    assert json_path.stat().st_size > 0
+    assert csv_path.stat().st_size > 0
+
+
+def test_bridge_k12_slots():
+    """Verify Bridge slots for K-12 course browsing and diagnostic quiz."""
+    import json
+    from app.bridge.facade import Bridge
+
+    bridge = Bridge()
+
+    # 1. get_k12_courses
+    courses_json = bridge.get_k12_courses()
+    courses = json.loads(courses_json)
+    assert isinstance(courses, list)
+
+    # 2. get_k12_topics
+    topics_json = bridge.get_k12_topics("test-cli-course")
+    topics = json.loads(topics_json)
+    assert isinstance(topics, list)
+
+    # 3. start_diagnostic_quiz
+    quiz_json = bridge.start_diagnostic_quiz("cli-fractions")
+    quiz = json.loads(quiz_json)
+    assert isinstance(quiz, list)
+    if quiz:
+        # 4. submit_diagnostic_quiz
+        payload = json.dumps({
+            "topic_id": "cli-fractions",
+            "submissions": [
+                {"question_id": quiz[0]["id"], "selected_option": 1, "response_time_ms": 1500}
+            ]
+        })
+        result_json = bridge.submit_diagnostic_quiz(payload)
+        result = json.loads(result_json)
+        assert "topic_id" in result
+        assert "initial_mastery" in result
+        assert "mastery_tier" in result
+
