@@ -593,3 +593,99 @@ class Bridge(QObject):
             from core.errors import sanitize_error
             sanitized = sanitize_error(exc, category="bridge_delete_session")
             return json.dumps({"ok": False, "error": sanitized.user_message})
+
+    # ── K-12 Adaptive Curriculum & Diagnostic Assessment ──────────────────
+
+    @Slot(result=str)
+    def get_k12_courses(self) -> str:
+        """Return list of available K-12 courses as JSON."""
+        try:
+            from core.tutor.course_repo import course_repo
+            courses = course_repo.list_courses()
+            return json.dumps(courses)
+        except Exception as exc:
+            logger.error(f"get_k12_courses error: {exc}")
+            return json.dumps([])
+
+    @Slot(str, result=str)
+    def get_k12_topics(self, course_id: str) -> str:
+        """Return topics for a given course ID with current student mastery."""
+        try:
+            from core.tutor.course_repo import course_repo
+            from core.tutor.mastery_engine import bkt_mastery_engine
+            topics = course_repo.get_topics_for_course(course_id)
+            student_id = "default_student"
+            try:
+                from core.profile import get_profile_store
+                active_p = get_profile_store().get_active_profile()
+                if active_p:
+                    student_id = active_p.profile_id
+            except Exception:
+                pass
+
+            for t in topics:
+                m_record = course_repo.get_mastery(student_id, t["id"])
+                if m_record:
+                    t["mastery_score"] = m_record["mastery_score"]
+                    t["tier"] = bkt_mastery_engine.get_mastery_tier(m_record["mastery_score"])
+                else:
+                    t["mastery_score"] = None
+                    t["tier"] = "Not Started"
+                qs = course_repo.get_questions_for_topic(t["id"])
+                t["question_count"] = len(qs)
+
+            return json.dumps(topics)
+        except Exception as exc:
+            logger.error(f"get_k12_topics error: {exc}")
+            return json.dumps([])
+
+    @Slot(str, result=str)
+    def start_diagnostic_quiz(self, topic_id: str) -> str:
+        """Select a 5-8 question diagnostic placement quiz for a topic."""
+        try:
+            from core.tutor.student_diagnostic import diagnostic_engine
+            quiz = diagnostic_engine.select_diagnostic_quiz(topic_id)
+            return json.dumps(quiz)
+        except Exception as exc:
+            logger.error(f"start_diagnostic_quiz error: {exc}")
+            return json.dumps([])
+
+    @Slot(str, result=str)
+    def submit_diagnostic_quiz(self, payload_json: str) -> str:
+        """Score diagnostic submissions, seed mastery, and return placement report."""
+        try:
+            from core.tutor.student_diagnostic import diagnostic_engine, DiagnosticSubmission
+            data = json.loads(payload_json)
+            topic_id = data.get("topic_id", "")
+            student_id = "default_student"
+            try:
+                from core.profile import get_profile_store
+                active_p = get_profile_store().get_active_profile()
+                if active_p:
+                    student_id = active_p.profile_id
+            except Exception:
+                pass
+
+            submissions = [
+                DiagnosticSubmission(
+                    question_id=s["question_id"],
+                    selected_option_index=int(s["selected_option"]),
+                    response_time_ms=int(s.get("response_time_ms", 0)),
+                )
+                for s in data.get("submissions", [])
+            ]
+            result = diagnostic_engine.evaluate_diagnostic(student_id, topic_id, submissions)
+            return json.dumps({
+                "topic_id": result.topic_id,
+                "student_id": result.student_id,
+                "total_questions": result.total_questions,
+                "correct_count": result.correct_count,
+                "initial_mastery": result.initial_mastery,
+                "mastery_tier": result.mastery_tier,
+                "question_results": result.question_results,
+                "recommendation": result.recommendation,
+            })
+        except Exception as exc:
+            logger.error(f"submit_diagnostic_quiz error: {exc}")
+            return json.dumps({"error": str(exc)})
+
