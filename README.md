@@ -27,10 +27,17 @@ This project was built from the ground up to demonstrate how specialized AI agen
   - **Grade-Band Coaches:** Primary School (Grades 1–5), Middle School (Grades 6–8), High School & Board Exam Coach (Grades 9–12).
   - **Pedagogical Support:** Socratic Questioner, Progressive Hint Giver, Doubt Buster, Formula & Theorem Companion, Quiz Master, Study Habit Coach.
   - **Enterprise & Productivity Agents:** Orchestrator, Research, Translation, Document, Summarization, and more.
-- **Adaptive K-12 Learning Engine (BKT):**
+- **Adaptive K-12 Learning Engine & Knowledge Explorer:**
   - **Course-as-Markdown Ingestion:** Authors create curricula in standard `.md` files with YAML frontmatter, anchored topics `{#topic-id}`, `level:N` paragraphs, and embedded machine-parseable ```` ```quiz ```` blocks.
   - **Diagnostic Placement Testing:** Automated 5–8 question placement test measuring baseline ability across difficulty levels 1–5.
   - **Bayesian Knowledge Tracing (BKT):** Continuous difficulty-weighted mastery updates ($M \in [0.0, 1.0]$) dynamically driving 3-tier pedagogical scaffolding (`Remedial`, `Core`, `Advanced`).
+  - **Interactive Desktop UI Course Explorer & Placement Modal:** Browse courses in the Knowledge tab, view visual topic mastery pills, and take interactive diagnostic quizzes directly in the desktop app with 1-click launch into personalized Socratic tutoring.
+- **Curriculum Authoring & Parental Reporting CLI:**
+  - **Course Ingestion CLI (`scripts/ingest_course.py`):** Authoring tool with `--validate-only` schema linting and continuous `--watch` filesystem reload.
+  - **Nightly Mastery Reports (`scripts/nightly_mastery_report.py`):** Automated progress rollup generating CSV and JSON reports with accuracy trends, tier distributions, and response times for teachers and parents.
+- **Performance & Central Inference Service:**
+  - Integrated inference cancellation via desktop UI Stop button (`bridge.cancel_generation()`).
+  - 50ms rAF debounced markdown streaming for smooth typing and immediate text display.
 - **Privacy Controlled by Design:**
   - **Local-Only Mode (Default):** All primary inference happens entirely on your local machine using quantized GGUF models.
   - **Cloud-Allowed Mode:** User-approved provider calls may transmit submitted content according to the provider's policy.
