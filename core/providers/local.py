@@ -77,7 +77,14 @@ class LocalProvider:
     _model = None
     _model_lock = threading.Lock()
     _infer_lock = threading.Lock()
+    _cancel_flag = False
     MODEL_PATH = LOCAL_MODEL_DIR / LOCAL_MODEL_FILE
+
+    @classmethod
+    def cancel(cls) -> None:
+        """Flag the current generation to stop early."""
+        logger.info("Cancellation requested for local model generation.")
+        cls._cancel_flag = True
 
     @classmethod
     def _load_model(cls, **override_params):
@@ -151,6 +158,20 @@ class LocalProvider:
                     verbose=False,
                     n_threads=n_threads,
                 )
+                # Attach KV RAM Cache to significantly reduce TTFT on repeated prefixes
+                try:
+                    try:
+                        from llama_cpp import LlamaRAMCache
+                        cache = LlamaRAMCache(capacity_bytes=512 * 1024 * 1024)  # 512MB cache
+                        cls._model.set_cache(cache)
+                        logger.info("Initialized 512MB LlamaRAMCache for prompt caching.")
+                    except ImportError:
+                        from llama_cpp import LlamaCache
+                        cache = LlamaCache(capacity_bytes=512 * 1024 * 1024)
+                        cls._model.set_cache(cache)
+                        logger.info("Initialized 512MB LlamaCache for prompt caching.")
+                except ImportError:
+                    logger.info("Prompt caching disabled: neither LlamaRAMCache nor LlamaCache found in llama_cpp.")
             except Exception as exc:
                 raise LocalModelError(f"Failed to load GGUF model: {exc}") from exc
 
@@ -238,7 +259,7 @@ class LocalProvider:
     @classmethod
     def stream(cls, prompt: str, **kwargs):
         """Stream tokens from the model. Yields strings."""
-        model = cls._load_model()
+        model = cls._load_model()  # Evaluated eagerly
         max_tokens = kwargs.get("max_tokens", DEFAULT_MAX_TOKENS)
         temperature = kwargs.get("temperature", DEFAULT_TEMPERATURE)
         top_p = kwargs.get("top_p", DEFAULT_TOP_P)
@@ -249,24 +270,51 @@ class LocalProvider:
 
         logger.info(f"Generating: max_tokens={max_tokens}, temp={temperature}")
 
-        try:
-            with cls._infer_lock:
-                stream = model.create_completion(
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    top_k=top_k,
-                    stop=stop,
-                    stream=True,
-                )
-                for chunk in stream:
-                    text = chunk["choices"][0].get("text", "")
-                    if text:
-                        yield text
-        except Exception as exc:
-            logger.error(f"Generation failed: {exc}")
-            raise LocalModelError(f"Generation failed: {exc}") from exc
+        def _generator():
+            try:
+                import time
+                start_time = time.time()
+                first_token_time = None
+                tokens_emitted = 0
+
+                with cls._infer_lock:
+                    cls._cancel_flag = False
+                    stream_obj = model.create_completion(
+                        prompt=prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        stop=stop,
+                        stream=True,
+                    )
+                    for chunk in stream_obj:
+                        if cls._cancel_flag:
+                            logger.info("Local model generation cancelled by user.")
+                            break
+                        
+                        text = chunk["choices"][0].get("text", "")
+                        if text:
+                            if first_token_time is None:
+                                first_token_time = time.time()
+                            tokens_emitted += 1
+                            yield text
+
+                    duration = time.time() - (first_token_time or start_time)
+                    ttft = ((first_token_time or start_time) - start_time) * 1000
+                    tps = tokens_emitted / duration if duration > 0 else 0
+                    logger.info(
+                        f"TELEMETRY: {{\"ttft_ms\": {ttft:.1f}, "
+                        f"\"generation_ms\": {duration*1000:.1f}, "
+                        f"\"output_tokens\": {tokens_emitted}, "
+                        f"\"tokens_per_second\": {tps:.1f}}}"
+                    )
+                    cls._cancel_flag = False
+            except Exception as exc:
+                logger.error(f"Generation failed: {exc}")
+                raise LocalModelError(f"Generation failed: {exc}") from exc
+                
+        return _generator()
 
     @classmethod
     def chat(cls, messages: list[dict], **kwargs) -> str:
@@ -298,7 +346,7 @@ class LocalProvider:
             Token strings.
         """
         prompt = format_gemma_prompt(messages)
-        yield from cls.stream(prompt, **kwargs)
+        return cls.stream(prompt, **kwargs)
 
     @classmethod
     def generate(cls, prompt: str, **kwargs) -> str:

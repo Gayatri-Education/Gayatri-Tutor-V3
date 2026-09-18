@@ -85,6 +85,8 @@ class LearningDependencyGraph:
         self.db_path = Path(db_path) if db_path else Path(DB_PATH)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._create_schema()
+        self._cache: dict[str, Concept] = {}
+        self._dirty: set[str] = set()
 
     def _conn(self) -> sqlite3.Connection:
         from core.db import get_safe_db_connection
@@ -154,6 +156,8 @@ class LearningDependencyGraph:
         conn.commit()
         conn.close()
         logger.info(f"Added concept: {concept_id} ({name})")
+        if concept_id in self._cache:
+            del self._cache[concept_id]
         return self.get_concept(concept_id)
 
     def _row_to_concept(self, row) -> Concept:
@@ -180,19 +184,28 @@ class LearningDependencyGraph:
             assessment_types=assess_types,
         )
 
+    def clear_cache(self) -> None:
+        """Clear the in-memory concept cache (Audit #DB-TEST)."""
+        self._cache.clear()
+
     def get_concept(self, concept_id: str) -> Concept | None:
-        """Get a concept by ID."""
+        if concept_id in self._cache:
+            return self._cache[concept_id]
+        
         conn = self._conn()
         row = conn.execute(
             "SELECT * FROM ldg_concepts WHERE id = ?", (concept_id,)
         ).fetchone()
         conn.close()
-        if row is None:
-            return None
-        return self._row_to_concept(row)
 
-    def list_concepts(self, subject: str = "") -> list[Concept]:
-        """List all concepts, optionally filtered by subject."""
+        if not row:
+            return None
+            
+        concept = self._row_to_concept(row)
+        self._cache[concept_id] = concept
+        return concept
+
+    def get_all_concepts(self, subject: str = "") -> list[Concept]:
         conn = self._conn()
         if subject:
             rows = conn.execute(
@@ -201,7 +214,15 @@ class LearningDependencyGraph:
         else:
             rows = conn.execute("SELECT * FROM ldg_concepts").fetchall()
         conn.close()
-        return [self._row_to_concept(row) for row in rows]
+        
+        concepts = [self._row_to_concept(row) for row in rows]
+        for c in concepts:
+            self._cache[c.id] = c
+        return concepts
+
+    def list_concepts(self, subject: str = "") -> list[Concept]:
+        """List all concepts, optionally filtered by subject."""
+        return self.get_all_concepts(subject=subject)
 
     # ── Prerequisite edges ───────────────────────────────────────────────
 
@@ -592,6 +613,8 @@ class LearningDependencyGraph:
         )
         conn.commit()
         conn.close()
+        if concept_id in self._cache:
+            del self._cache[concept_id]
         logger.info(f"Reset concept: {concept_id}")
 
     def reset_all(self) -> None:
@@ -605,7 +628,8 @@ class LearningDependencyGraph:
         )
         conn.commit()
         conn.close()
-        logger.warning("All concepts reset to initial mastery")
+        self.clear_cache()
+        logger.warning("Reset ALL concepts to initial mastery.")
 
     def delete_concept(self, concept_id: str) -> None:
         """Remove a concept and its prerequisite edges."""
@@ -615,6 +639,8 @@ class LearningDependencyGraph:
         conn.execute("DELETE FROM ldg_concepts WHERE id = ?", (concept_id,))
         conn.commit()
         conn.close()
+        if concept_id in self._cache:
+            del self._cache[concept_id]
         logger.info(f"Deleted concept: {concept_id}")
 
 

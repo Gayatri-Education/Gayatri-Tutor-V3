@@ -23,6 +23,7 @@ class HardwareProfile:
     """Detected hardware capabilities."""
     gpu_name: str = "unknown"
     gpu_vram_mb: int = 0
+    gpu_vram_free_mb: int = 0
     cpu_cores: int = 4
     cpu_threads: int = 4
     has_cuda: bool = False
@@ -55,17 +56,19 @@ def detect_hardware() -> HardwareProfile:
     if gpu_info:
         profile.gpu_name = gpu_info["name"]
         profile.gpu_vram_mb = gpu_info["vram_mb"]
+        profile.gpu_vram_free_mb = gpu_info["vram_free_mb"]
         profile.has_cuda = True
     else:
         profile.gpu_name = "CPU only"
         profile.gpu_vram_mb = 0
+        profile.gpu_vram_free_mb = 0
         profile.has_cuda = False
 
     # Detect RAM
     profile.ram_mb = _get_ram_mb()
 
     logger.info(
-        f"Hardware: GPU={profile.gpu_name} ({profile.gpu_vram_mb}MB VRAM), "
+        f"Hardware: GPU={profile.gpu_name} ({profile.gpu_vram_free_mb}MB free / {profile.gpu_vram_mb}MB VRAM), "
         f"CPU={profile.cpu_cores}c/{profile.cpu_threads}t, RAM={profile.ram_mb}MB"
     )
     return profile
@@ -91,25 +94,25 @@ def recommend_llama_params(profile: HardwareProfile, model_size_mb: int = 1600) 
     else:
         params.n_ctx = 2048
 
-    # GPU layers: all if VRAM can fit the model, partial otherwise
-    if profile.has_cuda and profile.gpu_vram_mb > 0:
-        if profile.gpu_vram_mb >= model_size_mb * 1.5:
-            # VRAM comfortably fits the model with headroom
+    # GPU layers: all if FREE VRAM can fit the model, partial otherwise
+    if profile.has_cuda and profile.gpu_vram_free_mb > 0:
+        if profile.gpu_vram_free_mb >= model_size_mb * 1.5:
+            # Free VRAM comfortably fits the model with headroom
             params.n_gpu_layers = -1  # all layers
-            logger.info(f"GPU layers: all (VRAM {profile.gpu_vram_mb}MB >= {model_size_mb}MB model)")
-        elif profile.gpu_vram_mb >= model_size_mb:
-            # VRAM fits the model exactly — use all but be cautious
+            logger.info(f"GPU layers: all (Free VRAM {profile.gpu_vram_free_mb}MB >= {model_size_mb}MB model)")
+        elif profile.gpu_vram_free_mb >= model_size_mb:
+            # Free VRAM fits the model exactly
             params.n_gpu_layers = -1
-            logger.info(f"GPU layers: all (tight fit, {profile.gpu_vram_mb}MB VRAM)")
-        elif profile.gpu_vram_mb >= model_size_mb / 2:
+            logger.info(f"GPU layers: all (tight fit, {profile.gpu_vram_free_mb}MB free VRAM)")
+        elif profile.gpu_vram_free_mb >= model_size_mb / 2:
             # Partial offload — estimate layers (roughly 1GB per ~5 layers for 2B model)
-            estimated_layers = max(10, int((profile.gpu_vram_mb / model_size_mb) * 35))
+            estimated_layers = max(10, int((profile.gpu_vram_free_mb / model_size_mb) * 35))
             params.n_gpu_layers = estimated_layers
-            logger.info(f"GPU layers: {estimated_layers} (partial, {profile.gpu_vram_mb}MB VRAM)")
+            logger.info(f"GPU layers: {estimated_layers} (partial, {profile.gpu_vram_free_mb}MB free VRAM)")
         else:
-            # Very little VRAM — CPU only
+            # Very little Free VRAM — CPU only
             params.n_gpu_layers = 0
-            logger.info(f"GPU layers: 0 (insufficient VRAM {profile.gpu_vram_mb}MB)")
+            logger.info(f"GPU layers: 0 (insufficient free VRAM {profile.gpu_vram_free_mb}MB)")
     else:
         params.n_gpu_layers = 0
         logger.info("GPU layers: 0 (no CUDA)")
@@ -159,7 +162,7 @@ def _get_nvidia_gpu_info() -> dict | None:
     """Get GPU info via nvidia-smi. Returns None if no NVIDIA GPU."""
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+            ["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode != 0:
@@ -173,8 +176,8 @@ def _get_nvidia_gpu_info() -> dict | None:
         parts = lines[0].split(",")
         name = parts[0].strip()
         vram_mb = int(parts[1].strip()) if len(parts) > 1 else 0
-
-        return {"name": name, "vram_mb": vram_mb}
+        vram_free_mb = int(parts[2].strip()) if len(parts) > 2 else vram_mb
+        return {"name": name, "vram_mb": vram_mb, "vram_free_mb": vram_free_mb}
     except Exception:
         return None
 

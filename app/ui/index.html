@@ -163,6 +163,25 @@
       line-height: 1.5;
       word-wrap: break-word;
     }
+    .message-content p {
+      margin-bottom: 8px;
+    }
+    .message-content p:last-child {
+      margin-bottom: 0;
+    }
+    .message-content pre {
+      background: #0f0f23;
+      padding: 8px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .message-content code {
+      background: #0f0f23;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
     .message.user {
       align-self: flex-end;
       background: #e94560;
@@ -527,6 +546,7 @@
           <input type="text" id="userInput" placeholder="Type a message or question..."
                  autocomplete="off" onkeydown="if(event.key==='Enter')send()">
           <button class="send-btn" id="sendBtn" onclick="send()">Send</button>
+          <button class="send-btn" id="stopBtn" onclick="cancelGeneration()" style="display: none; background: #666;">Stop</button>
         </div>
       </div>
 
@@ -685,11 +705,14 @@
   </div>
 
   <script src="qrc:/qtwebchannel/qwebchannel.js"></script>
+  <script src="marked.min.js"></script>
   <script>
     var bridge = null;
     var isGenerating = false;
     var currentTokens = [];
     var allAgents = [];
+    var markdownDebounceTimer = null;
+    var renderRequested = false;
 
     // ── QWebChannel setup ──
     new QWebChannel(qt.webChannelTransport, async function(channel) {
@@ -698,16 +721,27 @@
       // Signal handlers
       bridge.token.connect(function(idx, text) {
         currentTokens.push(text);
-        updateLastMessage();
+        
+        if (!renderRequested) {
+          renderRequested = true;
+          window.requestAnimationFrame(updateLastMessageRaw);
+        }
+
+        clearTimeout(markdownDebounceTimer);
+        markdownDebounceTimer = setTimeout(updateLastMessageMarkdown, 50);
       });
       bridge.done.connect(function() {
         isGenerating = false;
         updateSendButton();
+        clearTimeout(markdownDebounceTimer);
+        updateLastMessageMarkdown();
       });
       bridge.error.connect(function(msg) {
         addMessage('system', 'Error: ' + msg);
         isGenerating = false;
         updateSendButton();
+        clearTimeout(markdownDebounceTimer);
+        updateLastMessageMarkdown();
       });
 
       // Initial loads
@@ -1048,7 +1082,12 @@
 
       var content = document.createElement('div');
       content.className = 'message-content';
-      content.textContent = text;
+      
+      if (typeof marked !== 'undefined' && role !== 'system') {
+        content.innerHTML = marked.parse(text);
+      } else {
+        content.textContent = text;
+      }
       div.appendChild(content);
 
       chat.appendChild(div);
@@ -1056,7 +1095,8 @@
       return div;
     }
 
-    function updateLastMessage() {
+    function updateLastMessageRaw() {
+      renderRequested = false;
       var chat = document.getElementById('chat');
       var msgs = chat.querySelectorAll('.message.assistant');
       var last = msgs[msgs.length - 1];
@@ -1071,10 +1111,38 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
+    function updateLastMessageMarkdown() {
+      var chat = document.getElementById('chat');
+      var msgs = chat.querySelectorAll('.message.assistant');
+      var last = msgs[msgs.length - 1];
+      if (!last) return;
+      var content = last.querySelector('.message-content');
+      if (content && typeof marked !== 'undefined') {
+        content.innerHTML = marked.parse(currentTokens.join(''));
+      } else if (content) {
+        content.textContent = currentTokens.join('');
+      }
+      chat.scrollTop = chat.scrollHeight;
+    }
+
     function updateSendButton() {
-      var btn = document.getElementById('sendBtn');
-      btn.disabled = isGenerating;
-      btn.textContent = isGenerating ? '...' : 'Send';
+      var sendBtn = document.getElementById('sendBtn');
+      var stopBtn = document.getElementById('stopBtn');
+      if (isGenerating) {
+          sendBtn.style.display = 'none';
+          stopBtn.style.display = 'inline-block';
+      } else {
+          sendBtn.style.display = 'inline-block';
+          stopBtn.style.display = 'none';
+      }
+    }
+    
+    function cancelGeneration() {
+      if (!isGenerating || !bridge) return;
+      if (typeof bridge.cancel_generation === 'function') {
+        bridge.cancel_generation();
+        // Don't set isGenerating = false immediately, let the bridge.error/done signal handle it safely
+      }
     }
 
     // ── Window Controls (Frameless UI) ──

@@ -79,6 +79,7 @@ def test_regression_bug_18_mastery_threshold(tmp_path):
     conn.execute(f"UPDATE ldg_concepts SET mastery = {LDG_MASTERY_THRESHOLD + 0.05} WHERE id = 'c1'")
     conn.commit()
     conn.close()
+    ldg.clear_cache()
 
     advanced = tutor.get_next_concept_for_session("sess_thresh")
     assert advanced is not None

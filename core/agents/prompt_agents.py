@@ -22,6 +22,15 @@ def _local_chat(messages: list[dict], max_tokens: int = 300) -> str:
         logger.warning(f"Local model unavailable: {exc}")
         raise ModelUnavailableError(f"Local model unavailable: {exc}") from exc
 
+def _local_chat_stream(messages: list[dict], max_tokens: int = 300):
+    """Stream response from the local model."""
+    try:
+        from core.providers.local import LocalProvider
+        return LocalProvider.chat_stream(messages, max_tokens=max_tokens)
+    except Exception as exc:
+        logger.warning(f"Local model unavailable: {exc}")
+        raise ModelUnavailableError(f"Local model unavailable: {exc}") from exc
+
 
 def _build_messages(system: str, user_message: str,
                     history: list[dict] | None = None) -> list[dict]:
@@ -59,8 +68,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=400)
-            return AgentResponse(text=text, agent_name="Orchestrator Agent")
+            stream = _local_chat_stream(msgs, max_tokens=400)
+            return AgentResponse(text='', text_stream=stream, agent_name="Orchestrator Agent")
 
     @agent_registry.register(
         name="Research Agent",
@@ -80,8 +89,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Research Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Research Agent")
 
     @agent_registry.register(
         name="Document Agent",
@@ -99,8 +108,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Document Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Document Agent")
 
     @agent_registry.register(
         name="Summarization Agent",
@@ -118,8 +127,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Summarization Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Summarization Agent")
 
     @agent_registry.register(
         name="Translation Agent",
@@ -139,8 +148,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Translation Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Translation Agent")
 
     @agent_registry.register(
         name="Voice Assistant Agent",
@@ -157,8 +166,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=200)
-            return AgentResponse(text=text, agent_name="Voice Assistant Agent")
+            stream = _local_chat_stream(msgs, max_tokens=200)
+            return AgentResponse(text='', text_stream=stream, agent_name="Voice Assistant Agent")
 
     @agent_registry.register(
         name="Data Extraction Agent",
@@ -177,8 +186,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Data Extraction Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Data Extraction Agent")
 
     @agent_registry.register(
         name="Meeting Transcription Agent",
@@ -197,8 +206,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Meeting Transcription Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Meeting Transcription Agent")
 
     @agent_registry.register(
         name="Personal Assistant Agent",
@@ -216,8 +225,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=300)
-            return AgentResponse(text=text, agent_name="Personal Assistant Agent")
+            stream = _local_chat_stream(msgs, max_tokens=300)
+            return AgentResponse(text='', text_stream=stream, agent_name="Personal Assistant Agent")
 
     # ── Business & Operations Agents (13) ────────────────────────────────
 
@@ -238,8 +247,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="HR & Talent Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="HR & Talent Agent")
 
     @agent_registry.register(
         name="Financial Agent",
@@ -257,8 +266,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Financial Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Financial Agent")
 
     @agent_registry.register(
         name="Project Management Agent",
@@ -276,8 +285,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Project Management Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Project Management Agent")
 
     @agent_registry.register(
         name="Email Agent",
@@ -295,8 +304,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=400)
-            return AgentResponse(text=text, agent_name="Email Agent")
+            stream = _local_chat_stream(msgs, max_tokens=400)
+            return AgentResponse(text='', text_stream=stream, agent_name="Email Agent")
 
     @agent_registry.register(
         name="Creative Agent",
@@ -314,8 +323,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Creative Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Creative Agent")
 
     @agent_registry.register(
         name="Social Media Agent",
@@ -333,8 +342,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Social Media Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Social Media Agent")
 
     @agent_registry.register(
         name="Sales Agent",
@@ -352,8 +361,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Sales Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Sales Agent")
 
     @agent_registry.register(
         name="Legal Review Agent",
@@ -371,8 +380,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Legal Review Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Legal Review Agent")
 
     @agent_registry.register(
         name="Procurement Agent",
@@ -390,8 +399,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Procurement Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Procurement Agent")
 
     @agent_registry.register(
         name="Meeting Scheduler Agent",
@@ -409,8 +418,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=300)
-            return AgentResponse(text=text, agent_name="Meeting Scheduler Agent")
+            stream = _local_chat_stream(msgs, max_tokens=300)
+            return AgentResponse(text='', text_stream=stream, agent_name="Meeting Scheduler Agent")
 
     @agent_registry.register(
         name="Customer Support Agent",
@@ -428,8 +437,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=400)
-            return AgentResponse(text=text, agent_name="Customer Support Agent")
+            stream = _local_chat_stream(msgs, max_tokens=400)
+            return AgentResponse(text='', text_stream=stream, agent_name="Customer Support Agent")
 
     @agent_registry.register(
         name="News Analyst Agent",
@@ -447,8 +456,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="News Analyst Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="News Analyst Agent")
 
     @agent_registry.register(
         name="Presentation Agent",
@@ -467,8 +476,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Presentation Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Presentation Agent")
 
     # ── Sector Specialist Agents (8) ────────────────────────────────────
 
@@ -487,8 +496,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Assignment Grader")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Assignment Grader")
 
     @agent_registry.register(
         name="Policy Analyst Agent",
@@ -506,8 +515,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Policy Analyst Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Policy Analyst Agent")
 
     @agent_registry.register(
         name="Clinical Analysis Agent",
@@ -525,8 +534,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Clinical Analysis Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Clinical Analysis Agent")
 
     @agent_registry.register(
         name="Property Valuation Agent",
@@ -544,8 +553,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Property Valuation Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Property Valuation Agent")
 
     @agent_registry.register(
         name="Loan Underwriting Agent",
@@ -563,8 +572,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Loan Underwriting Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Loan Underwriting Agent")
 
     @agent_registry.register(
         name="Crop Advisory Agent",
@@ -582,8 +591,8 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Crop Advisory Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Crop Advisory Agent")
 
     @agent_registry.register(
         name="Demand Forecasting Agent",
@@ -601,7 +610,7 @@ def register_prompt_agents() -> None:
             )
             msgs = _build_messages(system, context.user_message,
                                    getattr(context, 'history', None))
-            text = _local_chat(msgs, max_tokens=500)
-            return AgentResponse(text=text, agent_name="Demand Forecasting Agent")
+            stream = _local_chat_stream(msgs, max_tokens=500)
+            return AgentResponse(text='', text_stream=stream, agent_name="Demand Forecasting Agent")
 
     logger.info(f"Registered {len(agent_registry._agents)} prompt-engineered agents")

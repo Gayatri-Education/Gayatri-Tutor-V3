@@ -1,6 +1,4 @@
-import pytest
-import json
-from core.tutor_engine import TutorEngine, get_tutor_engine
+from core.tutor_engine import TutorEngine
 from core.knowledge_graph import LearningDependencyGraph
 from core.orchestrator import _evaluate_tutor_response
 
@@ -15,6 +13,7 @@ def test_evaluate_tutor_response_mastery_update(monkeypatch, tmp_path):
     conn.execute("INSERT OR REPLACE INTO ldg_concepts (id, name, subject) VALUES ('test_concept', 'Test Concept', 'test_subject')")
     conn.commit()
     conn.close()
+    ldg.clear_cache()
 
     tutor = TutorEngine(ldg)
     monkeypatch.setattr("core.orchestrator._get_tutor_engine", lambda: tutor)
